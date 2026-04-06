@@ -29,6 +29,13 @@ outcome: boolean
 shares: int
 avg_price: int
 
+USER_SESSION:
+* PK: session_id
+session_id: int
+user_id: external key
+created_at: timestamp
+expires_at: timestamp
+
 ### Market Objects ###
 
 MARKET:
