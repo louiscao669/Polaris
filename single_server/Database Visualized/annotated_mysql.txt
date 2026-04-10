@@ -1,7 +1,5 @@
-use tmitch23;
 
--- organization objects
-
+### ORGANIZATION OBJECTS
 create table `organization` (
     `org_id` int auto_increment primary key,
     `name` varchar(255) not null,
@@ -15,7 +13,7 @@ create table `users` (
     `age` int,
     `email` varchar(255) not null,
     `username` varchar(100) not null unique,
-    `password_hash` varchar(255) not null
+    `password` varchar(255) not null
 );
 
 create table `organization_role` (
@@ -257,6 +255,7 @@ create table `market_result` (
         on delete cascade
 );
 
+###
 create table `user_market_shares` (
     `user_id` int not null,
     `market_id` int not null,
@@ -283,3 +282,5 @@ create table `market_price_snapshot` (
         foreign key (`market_id`) references `market`(`id`)
         on delete cascade
 );
+
+###
