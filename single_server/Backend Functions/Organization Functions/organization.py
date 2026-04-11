@@ -1,5 +1,10 @@
 def create_o(cursor, db, user_id, name, description):
 
+    # organization_leader.user_id must reference users.id (FK)
+    cursor.execute("SELECT 1 FROM users WHERE id = %s", (user_id,))
+    if cursor.fetchone() is None:
+        return None
+        
     # Check if organization with the same name already exists
 
     # Create organization and insert it into the database, returning the organization ID

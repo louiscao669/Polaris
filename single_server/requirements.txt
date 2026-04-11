@@ -1,0 +1,4 @@
+fastapi
+uvicorn[standard]
+pydantic
+pymysql>=1.1
