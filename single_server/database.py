@@ -77,6 +77,11 @@ def get_connection() -> Generator[pymysql.connections.Connection, None, None]:
     try:
         yield conn
     finally:
+        # End any open transaction (success paths already committed; failures did not).
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         conn.close()
 
 

@@ -1,13 +1,43 @@
-def create_o(cursor, db, user_id, name, description):
+"""Organization domain logic. Expected failures are returned as dicts, not raised."""
 
-    # organization_leader.user_id must reference users.id (FK)
+from __future__ import annotations
+
+from typing import Any
+
+
+def _ok(**extra: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {"ok": True}
+    out.update(extra)
+    return out
+
+
+def _fail(error: str, message: str) -> dict[str, Any]:
+    """error: permission | duplicate | validation"""
+    return {"ok": False, "error": error, "message": message}
+
+
+def create_o(cursor, db, user_id, name, description):
     cursor.execute("SELECT 1 FROM users WHERE id = %s", (user_id,))
     if cursor.fetchone() is None:
-        return None
-        
-    # Check if organization with the same name already exists
+        return _fail(
+            "validation",
+            f"No user with id {user_id}. Create the user in `users` first.",
+        )
 
-    # Create organization and insert it into the database, returning the organization ID
+    cursor.execute(
+        """
+        SELECT 1
+        FROM organization
+        WHERE name = %s
+        """,
+        (name,),
+    )
+    if cursor.fetchone() is not None:
+        return _fail(
+            "duplicate",
+            f"An organization named {name!r} already exists.",
+        )
+
     cursor.execute(
         """
         INSERT INTO organization (name, description)
@@ -26,11 +56,10 @@ def create_o(cursor, db, user_id, name, description):
     )
     db.commit()
 
-    return organization_id
+    return _ok(organization_id=organization_id)
 
 
-def create_o_role(cursor, db, user_id, organization_id, name, desc): 
-    # Check if user is the organization leader
+def create_o_role(cursor, db, user_id, organization_id, name, desc):
     cursor.execute(
         """
         SELECT 1
@@ -40,9 +69,11 @@ def create_o_role(cursor, db, user_id, organization_id, name, desc):
         (organization_id, user_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} is not a leader of organization {organization_id}.",
+        )
 
-    # Check if role with the same name already exists in the organization
     cursor.execute(
         """
         SELECT 1
@@ -52,9 +83,11 @@ def create_o_role(cursor, db, user_id, organization_id, name, desc):
         (organization_id, name),
     )
     if cursor.fetchone() is not None:
-        return None
+        return _fail(
+            "duplicate",
+            f"Role {name!r} already exists in organization {organization_id}.",
+        )
 
-    # Create role and insert it into the database, returning the role ID
     cursor.execute(
         """
         INSERT INTO organization_role (org_id, role, description)
@@ -63,12 +96,11 @@ def create_o_role(cursor, db, user_id, organization_id, name, desc):
         (organization_id, name, desc),
     )
     db.commit()
-    
-    return name
+
+    return _ok(role=name)
 
 
 def create_o_token(cursor, db, user_id, organization_id, token_name, description=None):
-    # Check if user is the organization leader
     cursor.execute(
         """
         SELECT 1
@@ -78,9 +110,11 @@ def create_o_token(cursor, db, user_id, organization_id, token_name, description
         (organization_id, user_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} is not a leader of organization {organization_id}.",
+        )
 
-    # Check if token with the same name already exists in the organization
     cursor.execute(
         """
         SELECT token_id
@@ -90,9 +124,11 @@ def create_o_token(cursor, db, user_id, organization_id, token_name, description
         (organization_id, token_name),
     )
     if cursor.fetchone() is not None:
-        return None
+        return _fail(
+            "duplicate",
+            f"Token {token_name!r} already exists in organization {organization_id}.",
+        )
 
-    # Create token and insert it into the database, returning the token ID 
     cursor.execute(
         """
         INSERT INTO organization_token (org_id, name, description)
@@ -101,5 +137,5 @@ def create_o_token(cursor, db, user_id, organization_id, token_name, description
         (organization_id, token_name, description),
     )
     db.commit()
-    
-    return cursor.lastrowid
+
+    return _ok(token_id=cursor.lastrowid)

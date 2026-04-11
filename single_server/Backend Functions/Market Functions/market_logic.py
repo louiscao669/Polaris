@@ -1,5 +1,33 @@
-def create_m(cursor, db, user_id, event_id, question, description): 
-    # Check if user has permission to create market in the event (or is organization leader)
+"""Market domain logic. Expected failures are returned as dicts, not raised."""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def _ok(**extra: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {"ok": True}
+    out.update(extra)
+    return out
+
+
+def _fail(error: str, message: str) -> dict[str, Any]:
+    """
+    error: permission | duplicate | validation | precondition |
+           not_open (market not tradeable) | not_closed (payout not ready)
+    """
+    return {"ok": False, "error": error, "message": message}
+
+
+def _rows(cursor) -> list[list[Any]]:
+    rows = cursor.fetchall()
+    if not rows:
+        return []
+    return [[*r] if isinstance(r, (list, tuple)) else r for r in rows]
+
+
+def create_m(cursor, db, user_id, event_id, question, description):
+    del description  # reserved for future use
     cursor.execute(
         """
         SELECT e.org_id
@@ -11,9 +39,11 @@ def create_m(cursor, db, user_id, event_id, question, description):
         (user_id, user_id, event_id),
     )
     if cursor.fetchone() is None:
-        return None
-    
-    # Check if any markets with the same question already exist in the event
+        return _fail(
+            "permission",
+            f"User {user_id} cannot create a market for event {event_id}.",
+        )
+
     cursor.execute(
         """
         SELECT id
@@ -23,9 +53,11 @@ def create_m(cursor, db, user_id, event_id, question, description):
         (event_id, question),
     )
     if cursor.fetchone() is not None:
-        return None
+        return _fail(
+            "duplicate",
+            f"A market with this question already exists for event {event_id}.",
+        )
 
-    # Create market and insert it into the database, returning the market ID
     cursor.execute(
         """
         INSERT INTO market (event_id, question, created_by)
@@ -35,11 +67,10 @@ def create_m(cursor, db, user_id, event_id, question, description):
     )
     db.commit()
 
-    return cursor.lastrowid
+    return _ok(market_id=cursor.lastrowid)
 
 
-def designate_m_token(cursor, db, user_id, market_id, token_id): 
-    # Check if user is the market creator or organization leader
+def designate_m_token(cursor, db, user_id, market_id, token_id):
     cursor.execute(
         """
         SELECT e.org_id
@@ -52,11 +83,13 @@ def designate_m_token(cursor, db, user_id, market_id, token_id):
     )
     market = cursor.fetchone()
     if market is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot designate tokens for market {market_id}.",
+        )
 
     organization_id = market[0]
 
-    # Check if the token is valid and belongs to the organization
     cursor.execute(
         """
         SELECT 1
@@ -66,9 +99,11 @@ def designate_m_token(cursor, db, user_id, market_id, token_id):
         (token_id, organization_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "validation",
+            f"Token {token_id} is invalid for this organization.",
+        )
 
-    # Designate the token for the market in the database
     cursor.execute(
         """
         SELECT 1
@@ -78,7 +113,10 @@ def designate_m_token(cursor, db, user_id, market_id, token_id):
         (market_id, token_id),
     )
     if cursor.fetchone() is not None:
-        return None
+        return _fail(
+            "duplicate",
+            f"Token {token_id} is already allowed for market {market_id}.",
+        )
 
     cursor.execute(
         """
@@ -89,11 +127,10 @@ def designate_m_token(cursor, db, user_id, market_id, token_id):
     )
     db.commit()
 
-    return True
+    return _ok()
 
 
-def designate_m_result(cursor, db, user_id, market_id, result): 
-    # Check if user is the market creator or organization leader
+def designate_m_result(cursor, db, user_id, market_id, result):
     cursor.execute(
         """
         SELECT e.org_id
@@ -105,13 +142,14 @@ def designate_m_result(cursor, db, user_id, market_id, result):
         (user_id, market_id, user_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot set the result for market {market_id}.",
+        )
 
-    # Check if the result is valid
     if result not in (True, False, 0, 1):
-        return None
+        return _fail("validation", f"Result {result!r} is not valid (use boolean or 0/1).")
 
-    # Designate the result for the market in the database
     cursor.execute(
         """
         SELECT 1
@@ -121,7 +159,10 @@ def designate_m_result(cursor, db, user_id, market_id, result):
         (market_id,),
     )
     if cursor.fetchone() is not None:
-        return None
+        return _fail(
+            "duplicate",
+            f"Market {market_id} already has a recorded result.",
+        )
 
     normalized_result = bool(result)
     cursor.execute(
@@ -131,8 +172,16 @@ def designate_m_result(cursor, db, user_id, market_id, result):
         """,
         (market_id, normalized_result),
     )
+    # Close market before payout so do_m_payout's query (is_open = FALSE) succeeds
+    cursor.execute(
+        """
+        UPDATE market
+        SET is_open = FALSE, close_at = NOW()
+        WHERE id = %s
+        """,
+        (market_id,),
+    )
 
-    # Call do_m_payout for all tokens in the market to distribute winnings
     cursor.execute(
         """
         SELECT token_id
@@ -143,24 +192,16 @@ def designate_m_result(cursor, db, user_id, market_id, result):
     )
     token_rows = cursor.fetchall()
     for token_row in token_rows:
-        do_m_payout(cursor, db, user_id, market_id, token_row[0])
+        payout = do_m_payout(cursor, db, user_id, market_id, token_row[0])
+        if isinstance(payout, dict) and payout.get("ok") is False:
+            return payout
 
-    # Close the market in the database
-    cursor.execute(
-        """
-        UPDATE market
-        SET is_open = FALSE, close_at = NOW()
-        WHERE id = %s
-        """,
-        (market_id,),
-    )
     db.commit()
 
-    return True
+    return _ok()
 
 
 def designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value):
-    # Check if user is the market creator or organization leader
     cursor.execute(
         """
         SELECT e.org_id
@@ -172,9 +213,11 @@ def designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value):
         (user_id, market_id, user_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot set constraints for market {market_id}.",
+        )
 
-    # Check if the constraint is valid
     cursor.execute(
         """
         SELECT 1
@@ -184,9 +227,8 @@ def designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value):
         (constraint_id,),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail("validation", f"Constraint {constraint_id} is not valid.")
 
-    # Designate the constraint for the market in the database 
     cursor.execute(
         """
         SELECT 1
@@ -196,7 +238,10 @@ def designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value):
         (market_id, constraint_id),
     )
     if cursor.fetchone() is not None:
-        return None
+        return _fail(
+            "duplicate",
+            f"Constraint {constraint_id} is already set for market {market_id}.",
+        )
 
     cursor.execute(
         """
@@ -206,12 +251,11 @@ def designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value):
         (constraint_id, market_id, value),
     )
     db.commit()
-    
-    return True
+
+    return _ok()
 
 
-def designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id): 
-    # Check if user is the market creator or organization leader
+def designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id):
     cursor.execute(
         """
         SELECT e.org_id
@@ -224,11 +268,13 @@ def designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id):
     )
     market = cursor.fetchone()
     if market is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot configure open-to-AS for market {market_id}.",
+        )
 
     organization_id = market[0]
 
-    # Check if the role and AS are valid
     cursor.execute(
         """
         SELECT 1
@@ -238,7 +284,10 @@ def designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id):
         (organization_id, role_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "validation",
+            f"Role {role_id!r} is not valid for this organization.",
+        )
 
     cursor.execute(
         """
@@ -249,9 +298,8 @@ def designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id):
         (as_id,),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail("validation", f"AS code {as_id!r} is not valid.")
 
-    # Designate the market to be open to the specified role as an AS in the database
     cursor.execute(
         """
         SELECT 1
@@ -261,7 +309,10 @@ def designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id):
         (market_id, organization_id, role_id),
     )
     if cursor.fetchone() is not None:
-        return None
+        return _fail(
+            "duplicate",
+            f"This role is already configured for market {market_id} (same org/role row).",
+        )
 
     cursor.execute(
         """
@@ -272,11 +323,10 @@ def designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id):
     )
     db.commit()
 
-    return True
+    return _ok()
 
 
-def do_m_transaction(cursor, db, user_id, market_id, token_id, type, side, qty): 
-    # Check if user has permission to trade in the market (or is organization leader)
+def do_m_transaction(cursor, db, user_id, market_id, token_id, type, side, qty):
     cursor.execute(
         """
         SELECT e.org_id
@@ -290,9 +340,11 @@ def do_m_transaction(cursor, db, user_id, market_id, token_id, type, side, qty):
         (user_id, user_id, market_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot trade in market {market_id}.",
+        )
 
-    # Check if the market is open and the token is valid
     cursor.execute(
         """
         SELECT 1
@@ -302,7 +354,7 @@ def do_m_transaction(cursor, db, user_id, market_id, token_id, type, side, qty):
         (market_id,),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail("not_open", f"Market {market_id} is not open for trading.")
 
     cursor.execute(
         """
@@ -313,13 +365,14 @@ def do_m_transaction(cursor, db, user_id, market_id, token_id, type, side, qty):
         (market_id, token_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "validation",
+            f"Token {token_id} is not allowed for market {market_id}.",
+        )
 
-    # Check if the user is following event/market constraints
     if qty <= 0:
-        return None
+        return _fail("validation", f"Quantity must be positive (got {qty}).")
 
-    # Execute the transaction in the database, updating liquidity and user balances accordingly
     cursor.execute(
         """
         SELECT COALESCE(MAX(transaction_id), 0) + 1
@@ -367,12 +420,11 @@ def do_m_transaction(cursor, db, user_id, market_id, token_id, type, side, qty):
         (market_id, normalized_side, price, qty),
     )
     db.commit()
-    
-    return transaction_id
+
+    return _ok(transaction_id=transaction_id)
 
 
-def do_m_payout(cursor, db, user_id, market_id, token_id): 
-    # Check if user has permission to execute payout (or is organization leader)
+def do_m_payout(cursor, db, user_id, market_id, token_id):
     cursor.execute(
         """
         SELECT e.org_id
@@ -384,9 +436,11 @@ def do_m_payout(cursor, db, user_id, market_id, token_id):
         (user_id, market_id, user_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot run payout for market {market_id}.",
+        )
 
-    # Check if the market is closed and the token is valid
     cursor.execute(
         """
         SELECT mr.outcome
@@ -398,7 +452,10 @@ def do_m_payout(cursor, db, user_id, market_id, token_id):
     )
     result_row = cursor.fetchone()
     if result_row is None:
-        return None
+        return _fail(
+            "not_closed",
+            f"Market {market_id} must be resolved and closed before payout.",
+        )
 
     cursor.execute(
         """
@@ -409,11 +466,13 @@ def do_m_payout(cursor, db, user_id, market_id, token_id):
         (market_id, token_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "validation",
+            f"Token {token_id} is not allowed for market {market_id}.",
+        )
 
     winning_outcome = result_row[0]
 
-    # Calculate and distribute winnings to users based on their token holdings
     cursor.execute(
         """
         SELECT user_id, shares
@@ -436,11 +495,10 @@ def do_m_payout(cursor, db, user_id, market_id, token_id):
 
     db.commit()
 
-    return True
+    return _ok()
 
 
-def stats_m_liquidity(cursor, db, user_id, market_id): 
-    # Check if user has permission to view market statistics (or is organization leader)
+def stats_m_liquidity(cursor, db, user_id, market_id):
     cursor.execute(
         """
         SELECT 1
@@ -454,9 +512,11 @@ def stats_m_liquidity(cursor, db, user_id, market_id):
         (user_id, user_id, market_id, user_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot view liquidity stats for market {market_id}.",
+        )
 
-    # Retrieve and return liquidity statistics for the market
     cursor.execute(
         """
         SELECT COALESCE(SUM(liquidity), 0)
@@ -465,11 +525,10 @@ def stats_m_liquidity(cursor, db, user_id, market_id):
         """,
         (market_id,),
     )
-    return cursor.fetchone()[0]
+    return _ok(liquidity=cursor.fetchone()[0])
 
 
-def stats_m_time_focus(cursor, db, user_id, market_id): 
-    # Check if user has permission to view market statistics (or is organization leader)
+def stats_m_time_focus(cursor, db, user_id, market_id):
     cursor.execute(
         """
         SELECT 1
@@ -483,9 +542,11 @@ def stats_m_time_focus(cursor, db, user_id, market_id):
         (user_id, user_id, market_id, user_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot view time-focus stats for market {market_id}.",
+        )
 
-    # Retrieve and return time focus statistics for the market
     cursor.execute(
         """
         SELECT ts, price, liquidity
@@ -496,11 +557,10 @@ def stats_m_time_focus(cursor, db, user_id, market_id):
         """,
         (market_id,),
     )
-    return cursor.fetchall()
+    return _ok(rows=_rows(cursor))
 
 
-def stats_m_whales(cursor, db, user_id, market_id): 
-    # Check if user has permission to view market statistics (or is organization leader)
+def stats_m_whales(cursor, db, user_id, market_id):
     cursor.execute(
         """
         SELECT 1
@@ -514,9 +574,11 @@ def stats_m_whales(cursor, db, user_id, market_id):
         (user_id, user_id, market_id, user_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot view whale stats for market {market_id}.",
+        )
 
-    # Retrieve and return whale statistics for the market
     cursor.execute(
         """
         SELECT user_id, SUM(shares) AS total_shares
@@ -528,11 +590,10 @@ def stats_m_whales(cursor, db, user_id, market_id):
         """,
         (market_id,),
     )
-    return cursor.fetchall()
+    return _ok(rows=_rows(cursor))
 
 
-def points_m(cursor, db, user_id, market_id, span): 
-    # Check if user has permission to view market points (or is organization leader)
+def points_m(cursor, db, user_id, market_id, span):
     cursor.execute(
         """
         SELECT 1
@@ -546,9 +607,11 @@ def points_m(cursor, db, user_id, market_id, span):
         (user_id, user_id, market_id, user_id),
     )
     if cursor.fetchone() is None:
-        return None
+        return _fail(
+            "permission",
+            f"User {user_id} cannot view points for market {market_id}.",
+        )
 
-    # Retrieve and return points for the market over the specified time span
     cursor.execute(
         """
         SELECT ts, outcome_id, price, liquidity
@@ -559,4 +622,4 @@ def points_m(cursor, db, user_id, market_id, span):
         """,
         (market_id, span),
     )
-    return cursor.fetchall()
+    return _ok(rows=_rows(cursor))

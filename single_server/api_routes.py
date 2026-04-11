@@ -7,7 +7,6 @@ from typing import Any
 import pymysql
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-
 from database import get_db
 
 from event_logic import (
@@ -33,31 +32,44 @@ from market_logic import (
 )
 from organization import create_o, create_o_role, create_o_token
 from trading import Handle_Buy, Handle_Sell
-from user_authenticity import SignupError, user_login, user_logout, user_signup
+from user_authenticity import user_login, user_logout, user_signup
 
 router = APIRouter()
 
 
 def _call_db(conn, fn, *args: Any):
+    """This helper only
+    handles unexpected **MySQL driver** errors (rollback + 500).
+    """
     cur = conn.cursor()
     try:
         return fn(cur, conn, *args)
     except pymysql.err.Error as e:
         conn.rollback()
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         cur.close()
 
 
-def _rows_payload(rows: Any) -> dict[str, Any]:
-    if rows is None:
-        return {"ok": False}
-    if isinstance(rows, (list, tuple)):
-        return {
-            "ok": True,
-            "rows": [[*r] if isinstance(r, (list, tuple)) else r for r in rows],
-        }
-    return {"ok": True, "data": rows}
+_DOMAIN_HTTP_STATUS = {
+    "permission": 403,
+    "duplicate": 409,
+    "validation": 422,
+    "precondition": 400,
+    "not_open": 409,
+    "not_closed": 409,
+    "auth": 401,
+}
+
+
+def _unwrap_result(result: Any) -> dict[str, Any]:
+    """event_logic / market_logic return {ok, ...} dicts; translate failures to HTTP errors."""
+    if not isinstance(result, dict) or result.get("ok") is not False:
+        return result
+    err = result.get("error", "unknown")
+    msg = result.get("message", "Request failed")
+    status = _DOMAIN_HTTP_STATUS.get(err, 400)
+    raise HTTPException(status_code=status, detail=msg)
 
 
 # --- Organization ---
@@ -85,38 +97,32 @@ class OrgTokenCreateBody(BaseModel):
 
 @router.post("/organizations")
 def http_create_organization(body: OrgCreateBody, conn=Depends(get_db)):
-    oid = _call_db(conn, create_o, body.user_id, body.name, body.description)
-    if oid is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No row in `users` with this user_id. Add a user to the `users` table first, then use its `id`.",
-        )
-    return {"ok": True, "organization_id": oid}
+    return _unwrap_result(
+        _call_db(conn, create_o, body.user_id, body.name, body.description)
+    )
 
 
 @router.post("/organization-roles")
 def http_create_organization_role(body: OrgRoleCreateBody, conn=Depends(get_db)):
-    rid = _call_db(
-        conn, create_o_role, body.user_id, body.organization_id, body.name, body.desc
+    return _unwrap_result(
+        _call_db(
+            conn, create_o_role, body.user_id, body.organization_id, body.name, body.desc
+        )
     )
-    if rid is None:
-        return {"ok": False}
-    return {"ok": True, "role": rid}
 
 
 @router.post("/organization-tokens")
 def http_create_organization_token(body: OrgTokenCreateBody, conn=Depends(get_db)):
-    tid = _call_db(
-        conn,
-        create_o_token,
-        body.user_id,
-        body.organization_id,
-        body.token_name,
-        body.description,
+    return _unwrap_result(
+        _call_db(
+            conn,
+            create_o_token,
+            body.user_id,
+            body.organization_id,
+            body.token_name,
+            body.description,
+        )
     )
-    if tid is None:
-        return {"ok": False}
-    return {"ok": True, "token_id": tid}
 
 
 # --- Events ---
@@ -160,59 +166,59 @@ class EventCloseBody(BaseModel):
 
 @router.post("/events")
 def http_create_event(body: EventCreateBody, conn=Depends(get_db)):
-    eid = _call_db(
-        conn, create_e, body.user_id, body.organization_id, body.caption
+    return _unwrap_result(
+        _call_db(conn, create_e, body.user_id, body.organization_id, body.caption)
     )
-    if eid is None:
-        return {"ok": False}
-    return {"ok": True, "event_id": eid}
 
 
 @router.post("/events/designate-token")
 def http_designate_event_token(body: EventTokenBody, conn=Depends(get_db)):
-    ok = _call_db(
-        conn, designate_e_token, body.user_id, body.event_id, body.token_id
+    return _unwrap_result(
+        _call_db(conn, designate_e_token, body.user_id, body.event_id, body.token_id)
     )
-    return {"ok": bool(ok)}
 
 
 @router.post("/events/designate-market-creator")
 def http_designate_event_market_creator(body: EventMarketCreatorBody, conn=Depends(get_db)):
-    ok = _call_db(
-        conn,
-        designate_e_market_creator,
-        body.user_id,
-        body.event_id,
-        body.market_creator_id,
+    return _unwrap_result(
+        _call_db(
+            conn,
+            designate_e_market_creator,
+            body.user_id,
+            body.event_id,
+            body.market_creator_id,
+        )
     )
-    return {"ok": bool(ok)}
 
 
 @router.post("/events/designate-constraint")
 def http_designate_event_constraint(body: EventConstraintBody, conn=Depends(get_db)):
-    ok = _call_db(
-        conn,
-        designate_e_contraint,
-        body.user_id,
-        body.event_id,
-        body.constraint_id,
-        body.value,
+    return _unwrap_result(
+        _call_db(
+            conn,
+            designate_e_contraint,
+            body.user_id,
+            body.event_id,
+            body.constraint_id,
+            body.value,
+        )
     )
-    return {"ok": bool(ok)}
 
 
 @router.post("/events/designate-open-to")
 def http_designate_event_open_to(body: EventOpenToBody, conn=Depends(get_db)):
-    ok = _call_db(
-        conn, designate_e_open_to, body.user_id, body.event_id, body.role_id
+    return _unwrap_result(
+        _call_db(
+            conn, designate_e_open_to, body.user_id, body.event_id, body.role_id
+        )
     )
-    return {"ok": bool(ok)}
 
 
 @router.post("/events/close")
 def http_designate_event_closed(body: EventCloseBody, conn=Depends(get_db)):
-    ok = _call_db(conn, designate_e_closed, body.user_id, body.event_id)
-    return {"ok": bool(ok)}
+    return _unwrap_result(
+        _call_db(conn, designate_e_closed, body.user_id, body.event_id)
+    )
 
 
 # --- Markets ---
@@ -267,77 +273,74 @@ class MarketPayoutBody(BaseModel):
 
 @router.post("/markets")
 def http_create_market(body: MarketCreateBody, conn=Depends(get_db)):
-    new_id = _call_db(
-        conn, create_m, body.user_id, body.event_id, body.question, ""
+    return _unwrap_result(
+        _call_db(conn, create_m, body.user_id, body.event_id, body.question, "")
     )
-    if new_id is None:
-        return {"ok": False}
-    return {"ok": True, "market_id": new_id}
 
 
 @router.post("/markets/designate-token")
 def http_designate_market_token(body: MarketTokenBody, conn=Depends(get_db)):
-    ok = _call_db(
-        conn, designate_m_token, body.user_id, body.market_id, body.token_id
+    return _unwrap_result(
+        _call_db(conn, designate_m_token, body.user_id, body.market_id, body.token_id)
     )
-    return {"ok": bool(ok)}
 
 
 @router.post("/markets/designate-result")
 def http_designate_market_result(body: MarketResultBody, conn=Depends(get_db)):
-    ok = _call_db(
-        conn, designate_m_result, body.user_id, body.market_id, body.result
+    return _unwrap_result(
+        _call_db(conn, designate_m_result, body.user_id, body.market_id, body.result)
     )
-    return {"ok": bool(ok)}
 
 
 @router.post("/markets/designate-constraint")
 def http_designate_market_constraint(body: MarketConstraintBody, conn=Depends(get_db)):
-    ok = _call_db(
-        conn,
-        designate_m_contraint,
-        body.user_id,
-        body.market_id,
-        body.constraint_id,
-        body.value,
+    return _unwrap_result(
+        _call_db(
+            conn,
+            designate_m_contraint,
+            body.user_id,
+            body.market_id,
+            body.constraint_id,
+            body.value,
+        )
     )
-    return {"ok": bool(ok)}
 
 
 @router.post("/markets/designate-open-to-as")
 def http_designate_market_open_to_as(body: MarketOpenToAsBody, conn=Depends(get_db)):
-    ok = _call_db(
-        conn,
-        designate_m_open_to_as,
-        body.user_id,
-        body.market_id,
-        body.role_id,
-        body.as_id,
+    return _unwrap_result(
+        _call_db(
+            conn,
+            designate_m_open_to_as,
+            body.user_id,
+            body.market_id,
+            body.role_id,
+            body.as_id,
+        )
     )
-    return {"ok": bool(ok)}
 
 
 @router.post("/markets/transactions")
 def http_market_transaction(body: MarketTransactionBody, conn=Depends(get_db)):
-    tid = _call_db(
-        conn,
-        do_m_transaction,
-        body.user_id,
-        body.market_id,
-        body.token_id,
-        body.price,
-        body.side,
-        body.qty,
+    return _unwrap_result(
+        _call_db(
+            conn,
+            do_m_transaction,
+            body.user_id,
+            body.market_id,
+            body.token_id,
+            body.price,
+            body.side,
+            body.qty,
+        )
     )
-    if tid is None:
-        return {"ok": False}
-    return {"ok": True, "transaction_id": tid}
 
 
 @router.post("/markets/payout")
 def http_market_payout(body: MarketPayoutBody, conn=Depends(get_db)):
-    ok = _call_db(conn, do_m_payout, body.user_id, body.market_id, body.token_id)
-    return {"ok": bool(ok)}
+    return _unwrap_result(
+        _call_db(conn, do_m_payout, body.user_id, body.market_id, body.token_id)
+    )
 
 
 @router.get("/markets/stats/liquidity")
@@ -346,8 +349,7 @@ def http_stats_liquidity(
     market_id: int = Query(...),
     conn=Depends(get_db),
 ):
-    rows = _call_db(conn, stats_m_liquidity, user_id, market_id)
-    return _rows_payload(rows)
+    return _unwrap_result(_call_db(conn, stats_m_liquidity, user_id, market_id))
 
 
 @router.get("/markets/stats/time-focus")
@@ -356,8 +358,7 @@ def http_stats_time_focus(
     market_id: int = Query(...),
     conn=Depends(get_db),
 ):
-    rows = _call_db(conn, stats_m_time_focus, user_id, market_id)
-    return _rows_payload(rows)
+    return _unwrap_result(_call_db(conn, stats_m_time_focus, user_id, market_id))
 
 
 @router.get("/markets/stats/whales")
@@ -366,8 +367,7 @@ def http_stats_whales(
     market_id: int = Query(...),
     conn=Depends(get_db),
 ):
-    rows = _call_db(conn, stats_m_whales, user_id, market_id)
-    return _rows_payload(rows)
+    return _unwrap_result(_call_db(conn, stats_m_whales, user_id, market_id))
 
 
 @router.get("/markets/points")
@@ -377,8 +377,7 @@ def http_market_points(
     span: int = Query(..., ge=1),
     conn=Depends(get_db),
 ):
-    rows = _call_db(conn, points_m, user_id, market_id, span)
-    return _rows_payload(rows)
+    return _unwrap_result(_call_db(conn, points_m, user_id, market_id, span))
 
 
 # --- Trading (in-memory demo) ---
@@ -393,25 +392,15 @@ class TradingOrderBody(BaseModel):
 
 
 @router.post("/trading/buy")
-def http_trading_buy(body: TradingOrderBody):
-    return Handle_Buy(
-        body.request_id,
-        body.user_id,
-        body.market_id,
-        body.quantity,
-        body.price_limit_cents,
-    )
+def http_trading_buy(body: TradingOrderBody, conn=Depends(get_db)):
+    ok = _call_db(conn, Handle_Buy, body.request_id, body.user_id, body.market_id, body.quantity, body.price_limit_cents)
+    return {"ok": bool(ok)}
 
 
 @router.post("/trading/sell")
-def http_trading_sell(body: TradingOrderBody):
-    return Handle_Sell(
-        body.request_id,
-        body.user_id,
-        body.market_id,
-        body.quantity,
-        body.price_limit_cents,
-    )
+def http_trading_sell(body: TradingOrderBody, conn=Depends(get_db)):
+    ok = _call_db(conn, Handle_Sell, body.request_id, body.user_id, body.market_id, body.quantity, body.price_limit_cents)
+    return {"ok": bool(ok)}
 
 
 # --- Auth (user_authenticity) ---
@@ -434,18 +423,16 @@ class LogoutBody(BaseModel):
 
 
 @router.post("/auth/login")
-def http_login(body: LoginBody):
-    try:
-        token = user_login(body.username, body.password)
-        return {"ok": True, "session_token": token}
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e)) from e
+def http_login(body: LoginBody, conn=Depends(get_db)):
+    return _unwrap_result(
+        _call_db(conn, user_login, body.username, body.password)
+    )
 
 
 @router.post("/auth/signup")
 def http_signup(body: SignupBody, conn=Depends(get_db)):
-    try:
-        user_id = _call_db(
+    return _unwrap_result(
+        _call_db(
             conn,
             user_signup,
             body.first,
@@ -455,17 +442,9 @@ def http_signup(body: SignupBody, conn=Depends(get_db)):
             body.password,
             body.age,
         )
-        return {"ok": True, "user_id": user_id}
-    except SignupError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.detail) from e
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    )
 
 
 @router.post("/auth/logout")
-def http_logout(body: LogoutBody):
-    try:
-        user_logout(body.session_token)
-        return {"ok": True}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+def http_logout(body: LogoutBody, conn=Depends(get_db)):
+    return _unwrap_result(_call_db(conn, user_logout, body.session_token))
