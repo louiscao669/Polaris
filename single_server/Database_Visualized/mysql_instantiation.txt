@@ -257,29 +257,3 @@ CREATE TABLE IF NOT EXISTS `market_result` (
         on delete cascade
 );
 
-CREATE TABLE IF NOT EXISTS `user_market_shares` (
-    `user_id` int not null,
-    `market_id` int not null,
-    `outcome` boolean not null,
-    `shares` int not null default 0,
-    `avg_price` int not null default 0,
-    primary key (`user_id`, `market_id`, `outcome`),
-    constraint `fk_user_market_shares_user`
-        foreign key (`user_id`) references `users`(`id`)
-        on delete cascade,
-    constraint `fk_user_market_shares_market`
-        foreign key (`market_id`) references `market`(`id`)
-        on delete cascade
-);
-
-CREATE TABLE IF NOT EXISTS `market_price_snapshot` (
-    `market_id` int not null,
-    `outcome_id` boolean not null,
-    `price` int not null,
-    `liquidity` int not null,
-    `ts` timestamp not null default current_timestamp,
-    primary key (`market_id`, `outcome_id`, `ts`),
-    constraint `fk_market_price_snapshot_market`
-        foreign key (`market_id`) references `market`(`id`)
-        on delete cascade
-);
