@@ -1,22 +1,5 @@
-"""Event domain logic. Expected failures are returned as dicts, not raised."""
-
-from __future__ import annotations
-
-from typing import Any
-
-
-def _ok(**extra: Any) -> dict[str, Any]:
-    out: dict[str, Any] = {"ok": True}
-    out.update(extra)
-    return out
-
-
-def _fail(error: str, message: str) -> dict[str, Any]:
-    """error: permission | duplicate | validation | precondition"""
-    return {"ok": False, "error": error, "message": message}
-
-
-def create_e(cursor, db, user_id, organization_id, caption):
+def create_e(cursor, db, user_id, organization_id, caption): 
+    # Check if user is the orgnization leader
     cursor.execute(
         """
         SELECT 1
@@ -26,11 +9,9 @@ def create_e(cursor, db, user_id, organization_id, caption):
         (organization_id, user_id),
     )
     if cursor.fetchone() is None:
-        return _fail(
-            "permission",
-            f"User {user_id} cannot create events for this organization.",
-        )
+        return None
 
+    # Check if event with the same caption already exists in the organization
     cursor.execute(
         """
         SELECT event_id
@@ -40,11 +21,9 @@ def create_e(cursor, db, user_id, organization_id, caption):
         (organization_id, caption),
     )
     if cursor.fetchone() is not None:
-        return _fail(
-            "duplicate",
-            f"An event with caption '{caption}' already exists in this organization.",
-        )
+        return None
 
+    # Create event and insert it into the database, returning the event ID
     cursor.execute(
         """
         INSERT INTO events (org_id, caption)
@@ -54,10 +33,11 @@ def create_e(cursor, db, user_id, organization_id, caption):
     )
     db.commit()
 
-    return _ok(event_id=cursor.lastrowid)
+    return cursor.lastrowid
 
 
-def designate_e_token(cursor, db, user_id, event_id, token_id):
+def designate_e_token(cursor, db, user_id, event_id, token_id): 
+    # Check if user is the organization leader
     cursor.execute(
         """
         SELECT e.org_id
@@ -69,13 +49,11 @@ def designate_e_token(cursor, db, user_id, event_id, token_id):
     )
     event = cursor.fetchone()
     if event is None:
-        return _fail(
-            "permission",
-            f"User {user_id} cannot designate tokens for this event.",
-        )
+        return None
 
     organization_id = event[0]
 
+    # Check if the token is valid and belongs to the organization
     cursor.execute(
         """
         SELECT 1
@@ -85,11 +63,9 @@ def designate_e_token(cursor, db, user_id, event_id, token_id):
         (token_id, organization_id),
     )
     if cursor.fetchone() is None:
-        return _fail(
-            "validation",
-            f"Token {token_id} is invalid or does not belong to this organization.",
-        )
+        return None
 
+    # Designate the token for the event in the database
     cursor.execute(
         """
         SELECT 1
@@ -99,10 +75,7 @@ def designate_e_token(cursor, db, user_id, event_id, token_id):
         (event_id, token_id),
     )
     if cursor.fetchone() is not None:
-        return _fail(
-            "duplicate",
-            f"Token {token_id} is already designated for this event.",
-        )
+        return None
 
     cursor.execute(
         """
@@ -113,10 +86,11 @@ def designate_e_token(cursor, db, user_id, event_id, token_id):
     )
     db.commit()
 
-    return _ok()
+    return True
 
 
-def designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id):
+def designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id): 
+    # Check if user is the organization leader
     cursor.execute(
         """
         SELECT e.org_id
@@ -128,13 +102,11 @@ def designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id)
     )
     event = cursor.fetchone()
     if event is None:
-        return _fail(
-            "permission",
-            f"User {user_id} cannot designate market creators for this event.",
-        )
+        return None
 
     organization_id = event[0]
 
+    # Check if the market creator is valid and belongs to the organization
     cursor.execute(
         """
         SELECT 1
@@ -144,11 +116,9 @@ def designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id)
         (organization_id, market_creator_id),
     )
     if cursor.fetchone() is None:
-        return _fail(
-            "validation",
-            f"User {market_creator_id} is not valid for this organization.",
-        )
+        return None
 
+    # Designate the market creator for the event in the database
     cursor.execute(
         """
         SELECT 1
@@ -158,10 +128,7 @@ def designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id)
         (event_id, market_creator_id),
     )
     if cursor.fetchone() is not None:
-        return _fail(
-            "duplicate",
-            f"User {market_creator_id} is already a market creator for this event.",
-        )
+        return None
 
     cursor.execute(
         """
@@ -172,10 +139,11 @@ def designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id)
     )
     db.commit()
 
-    return _ok()
+    return True
 
 
-def designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value):
+def designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value): 
+    # Check if user is the organization leader
     cursor.execute(
         """
         SELECT 1
@@ -186,11 +154,9 @@ def designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value):
         (event_id, user_id),
     )
     if cursor.fetchone() is None:
-        return _fail(
-            "permission",
-            f"User {user_id} cannot designate constraints for this event.",
-        )
+        return None
 
+    # Check if the constraint is valid
     cursor.execute(
         """
         SELECT 1
@@ -200,8 +166,9 @@ def designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value):
         (constraint_id,),
     )
     if cursor.fetchone() is None:
-        return _fail("validation", f"Constraint {constraint_id} is not valid.")
+        return None
 
+    # Designate the constraint for the event in the database
     cursor.execute(
         """
         SELECT 1
@@ -211,10 +178,7 @@ def designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value):
         (event_id, constraint_id),
     )
     if cursor.fetchone() is not None:
-        return _fail(
-            "duplicate",
-            f"Constraint {constraint_id} is already set for this event.",
-        )
+        return None
 
     cursor.execute(
         """
@@ -225,10 +189,11 @@ def designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value):
     )
     db.commit()
 
-    return _ok()
+    return True
 
 
-def designate_e_open_to(cursor, db, user_id, event_id, role_id):
+def designate_e_open_to(cursor, db, user_id, event_id, role_id): 
+    # Check if user is the organization leader
     cursor.execute(
         """
         SELECT e.org_id
@@ -240,13 +205,11 @@ def designate_e_open_to(cursor, db, user_id, event_id, role_id):
     )
     event = cursor.fetchone()
     if event is None:
-        return _fail(
-            "permission",
-            f"User {user_id} cannot configure open-to roles for this event.",
-        )
+        return None
 
     organization_id = event[0]
 
+    # Check if the role is valid
     cursor.execute(
         """
         SELECT 1
@@ -256,11 +219,9 @@ def designate_e_open_to(cursor, db, user_id, event_id, role_id):
         (organization_id, role_id),
     )
     if cursor.fetchone() is None:
-        return _fail(
-            "validation",
-            f"Role '{role_id}' is not valid for this organization.",
-        )
+        return None
 
+    # Designate the event to be open to the specified role in the database
     cursor.execute(
         """
         SELECT 1
@@ -270,10 +231,7 @@ def designate_e_open_to(cursor, db, user_id, event_id, role_id):
         (event_id, organization_id, role_id),
     )
     if cursor.fetchone() is not None:
-        return _fail(
-            "duplicate",
-            f"Role '{role_id}' is already designated for this event.",
-        )
+        return None
 
     cursor.execute(
         """
@@ -284,10 +242,11 @@ def designate_e_open_to(cursor, db, user_id, event_id, role_id):
     )
     db.commit()
 
-    return _ok()
+    return True
+    
 
-
-def designate_e_closed(cursor, db, user_id, event_id):
+def designate_e_closed(cursor, db, user_id, event_id): 
+    # Check if user is the organization leader
     cursor.execute(
         """
         SELECT 1
@@ -298,11 +257,9 @@ def designate_e_closed(cursor, db, user_id, event_id):
         (event_id, user_id),
     )
     if cursor.fetchone() is None:
-        return _fail(
-            "permission",
-            f"User {user_id} cannot close this event.",
-        )
+        return None
 
+    # Check if markets are all closed for the event
     cursor.execute(
         """
         SELECT 1
@@ -312,11 +269,9 @@ def designate_e_closed(cursor, db, user_id, event_id):
         (event_id,),
     )
     if cursor.fetchone() is not None:
-        return _fail(
-            "precondition",
-            "Close all markets for this event before closing the event.",
-        )
+        return None
 
+    # Close the event in the database
     cursor.execute(
         """
         UPDATE events
@@ -327,4 +282,4 @@ def designate_e_closed(cursor, db, user_id, event_id):
     )
     db.commit()
 
-    return _ok()
+    return True
