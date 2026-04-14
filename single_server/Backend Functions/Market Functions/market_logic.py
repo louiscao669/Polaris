@@ -1,5 +1,5 @@
 import pymysql, datetime
-from .market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
+from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
 
 def create_m(cursor, db, user_id, event_id, question, description): 
 
@@ -125,28 +125,18 @@ def designate_m_token(cursor, db, user_id, market_id, token_id):
 
         if e.args and e.args[0] == 1062:
 
-            return True
-
-        return False
-
-    except pymysql.err.IntegrityError as e:
-        # prevent sql transaction from partially executing and leaving the database in an inconsistent state
-        db.rollback()
-
-        if e.args and e.args[0] == 1062:
-
             cursor.execute(
                 """
-                SELECT as_id
-                FROM market_open_to_as
-                WHERE market_id = %s AND org_id = %s AND role_id = %s
+                SELECT 1
+                FROM market_tokens_allowed
+                WHERE market_id = %s AND token_id = %s
                 """,
-                (market_id, organization_id, role_id),
+                (market_id, token_id),
             )
 
             existing_row = cursor.fetchone()
 
-            if existing_row is not None and existing_row[0] == as_id:
+            if existing_row is not None:
 
                 return True
 
@@ -349,7 +339,7 @@ def designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value):
         return False
 
 def designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id): 
-
+    organization_id = None
     try:
         # Check if user is the market creator or organization leader
         cursor.execute(

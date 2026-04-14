@@ -33,7 +33,7 @@ from market_logic import (
     stats_m_whales,
 )
 from organization import create_o, create_o_role, create_o_token
-from trading import Handle_Buy, Handle_Sell
+# from trading import Handle_Buy, Handle_Sell
 from user_authenticity import user_login, user_logout, user_signup
 
 router = APIRouter()
@@ -414,16 +414,16 @@ class TradingOrderBody(BaseModel):
     price_limit_cents: int
 
 
-@router.post("/trading/buy")
-def http_trading_buy(body: TradingOrderBody, conn=Depends(get_db)):
-    ok = _call_db(conn, Handle_Buy, body.request_id, body.user_id, body.market_id, body.quantity, body.price_limit_cents)
-    return {"ok": bool(ok)}
+# @router.post("/trading/buy")
+# def http_trading_buy(body: TradingOrderBody, conn=Depends(get_db)):
+#     ok = _call_db(conn, Handle_Buy, body.request_id, body.user_id, body.market_id, body.quantity, body.price_limit_cents)
+#     return {"ok": bool(ok)}
 
 
-@router.post("/trading/sell")
-def http_trading_sell(body: TradingOrderBody, conn=Depends(get_db)):
-    ok = _call_db(conn, Handle_Sell, body.request_id, body.user_id, body.market_id, body.quantity, body.price_limit_cents)
-    return {"ok": bool(ok)}
+# @router.post("/trading/sell")
+# def http_trading_sell(body: TradingOrderBody, conn=Depends(get_db)):
+#     ok = _call_db(conn, Handle_Sell, body.request_id, body.user_id, body.market_id, body.quantity, body.price_limit_cents)
+#     return {"ok": bool(ok)}
 
 
 # --- Auth (user_authenticity) ---

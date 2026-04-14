@@ -19,13 +19,6 @@ for _name in (
         sys.path.insert(0, _p)
 
 from api_routes import router as api_router
-from database import create_db_and_tables
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    create_db_and_tables()
-    yield
-
-
-app = FastAPI(title="Single Server Market System", lifespan=lifespan)
+app = FastAPI(title="Single Server Market System")
 app.include_router(api_router)
