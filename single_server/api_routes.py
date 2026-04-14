@@ -27,7 +27,9 @@ from market_logic import (
     do_m_transaction,
     points_m,
     stats_m_liquidity,
+    stats_m_trade_distribution,
     stats_m_time_focus,
+    stats_m_window_comparison,
     stats_m_whales,
 )
 from organization import create_o, create_o_role, create_o_token
@@ -260,7 +262,8 @@ class MarketTransactionBody(BaseModel):
     user_id: int
     market_id: int
     token_id: int
-    price: int = Field(description="Stored as price in market_transaction (param `type` in backend).")
+    transaction_id: int
+    transaction_type: str = Field(description="Trade direction stored as type in market_transaction: BUY or SELL.")
     side: bool
     qty: int
 
@@ -329,9 +332,10 @@ def http_market_transaction(body: MarketTransactionBody, conn=Depends(get_db)):
             body.user_id,
             body.market_id,
             body.token_id,
-            body.price,
             body.side,
             body.qty,
+            body.transaction_id,
+            body.transaction_type,
         )
     )
 
@@ -368,6 +372,25 @@ def http_stats_whales(
     conn=Depends(get_db),
 ):
     return _unwrap_result(_call_db(conn, stats_m_whales, user_id, market_id))
+
+
+@router.get("/markets/stats/trade-distribution")
+def http_stats_trade_distribution(
+    user_id: int = Query(...),
+    market_id: int = Query(...),
+    conn=Depends(get_db),
+):
+    return _unwrap_result(_call_db(conn, stats_m_trade_distribution, user_id, market_id))
+
+
+@router.get("/markets/stats/window-comparison")
+def http_stats_window_comparison(
+    user_id: int = Query(...),
+    market_id: int = Query(...),
+    hours: int = Query(24, ge=1),
+    conn=Depends(get_db),
+):
+    return _unwrap_result(_call_db(conn, stats_m_window_comparison, user_id, market_id, hours))
 
 
 @router.get("/markets/points")

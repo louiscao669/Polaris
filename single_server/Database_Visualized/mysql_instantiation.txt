@@ -4,7 +4,7 @@ use tmitch23;
 
 CREATE TABLE IF NOT EXISTS `organization` (
     `org_id` int auto_increment primary key,
-    `name` varchar(255) not null,
+    `name` varchar(255) not null unique,
     `description` text
 );
 
@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS `organization_token` (
     `org_id` int not null,
     `name` varchar(255) not null,
     `description` text,
+    constraint `uq_org_token_org_name`
+        unique (`org_id`, `name`),
     constraint `fk_org_token_org`
         foreign key (`org_id`) references `organization`(`org_id`)
         on delete cascade
@@ -118,7 +120,9 @@ CREATE TABLE IF NOT EXISTS `events` (
     `is_open` boolean not null default true,
     constraint `fk_event_org`
         foreign key (`org_id`) references `organization`(`org_id`)
-        on delete cascade
+        on delete cascade,
+    constraint `uq_events_org_caption`
+        unique (`org_id`, `caption`)
 );
 
 CREATE TABLE IF NOT EXISTS `event_tokens_allowed` (
