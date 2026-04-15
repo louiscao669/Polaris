@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Log In{% endblock %}
+{% block extra_css %} 
+<style>
+.signup-form {
+        background: white;
+        padding: 10px;
+        border-radius: 0px;
+        border: 1px solid #ccc;
+    }
+    input { display: block; margin-bottom: 10px; }
+    
+    .form-card {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        width: 100%;
+        max-width: 400px;
+    }
+    .form-card div {
+        margin-bottom: 15px;
+    }
+
+    .form-card input {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+    }
+</style>
+{% endblock %}
+
+{% block content %} 
+<div class="form-card">
+
+    <h1>Log In to WorNDly</h1>
+
+    <form method="POST">
+        {% csrf_token %}
+        <div class="signup-form">
+            <label>Username: </label>
+            <input type="text" name="username" required>
+        </div>
+        
+        <div class="signup-form">
+            <label>Password: </label>
+            <input type="password" name="password" required>
+        </div>
+
+        <button type="submit">Log In</button>
+    </form>
+
+    <a href="{% url 'signup' %}">
+        <button type="button">Make Account</button>
+    </a>
+</div>
+{% endblock %}

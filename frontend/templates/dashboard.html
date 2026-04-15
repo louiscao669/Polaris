@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .card h1 {
+        margin-bottom: 10px;
+    }
+
+    .btn {
+        display: block;
+        width: 100%;
+        margin-top: 10px;
+        padding: 10px;
+        border: none;
+        cursor: pointer;
+    }
+
+    .play-btn {
+        background-color: #4CAF50;
+        color: white;
+    }
+
+    .logout-btn {
+        background-color: #d9534f;
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="card">
+
+    <h1>Dashboard</h1>
+    <p>You are logged in.</p>
+
+    <a href="/game/">
+        <button class="btn play-btn">Play Game</button>
+    </a>
+
+    <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn logout-btn">Log Out</button>
+    </form>
+
+</div>
+
+{% endblock %}

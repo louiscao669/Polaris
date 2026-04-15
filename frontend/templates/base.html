@@ -1,0 +1,77 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}WorNDly{% endblock %}</title>
+
+    {% block extra_css %}{% endblock %}
+
+    <style>
+        body { 
+            font-family: sans-serif; 
+            background-color: #f0f0f0; 
+            margin: 0;
+        }
+
+        /* simple navbar */
+        .navbar {
+            background-color: #2d6cdf;
+            color: white;
+            padding: 10px 20px;
+        }
+
+        .navbar span {
+            font-weight: bold;
+            margin-right: 15px;
+        }
+
+        .navbar a {
+            color: white;
+            text-decoration: none;
+            margin-right: 10px;
+        }
+
+        .navbar a:hover {
+            text-decoration: underline;
+        }
+
+        .page-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f8f9fa;
+
+            background-image: linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.6)), url("{% static 'homepage_bg.png' %}");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="navbar">
+        <span>WorNDly</span>
+        <a href="{% url 'home' %}">Home</a>
+        <a href="/game/">Play</a>
+        {% if user.is_authenticated %}
+            <a href="{% url 'logout' %}">Logout</a>
+        {% endif %}
+    </div>
+
+    <div class="page-wrapper">
+        <div class="container">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+</body>
+</html>

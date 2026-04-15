@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    .signup-form {
+        background: white;
+        padding: 10px;
+        border-radius: 0px;
+        border: 1px solid #ccc;
+    }
+    input { display: block; margin-bottom: 10px; }
+    
+    .form-card {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        width: 100%;
+        max-width: 400px;
+    }
+    .form-card div {
+        margin-bottom: 15px;
+    }
+
+    .form-card input {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+    }
+</style>
+{% endblock %}
+
+{% block title %}Sign In{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+    <div class="error-container">
+        {% for message in messages %}
+            <p style="color: red; font-weight: bold;">{{ message }}</p>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<div class="form-card">
+    
+    <h1>Sign Up to WorNDly</h1>
+
+    <form method="POST">
+        {% csrf_token %}
+        <div class="signup-form">
+            <label>Name: </label>
+            <input type="text" name="name">
+        </div>
+        <div class="signup-form">
+            <label>Username: </label>
+            <input type="text" name="username" required>
+        </div>
+        <div class="signup-form">
+            <label>Email: </label>
+            <input type="text" name="email" required>
+        </div>
+        <div class="signup-form">
+            <label>Password: </label>
+            <input type="password" name="password" required>
+        </div>
+
+        <button type="submit">Sign Up</button>
+    </form>
+
+</div>
+{% endblock %}

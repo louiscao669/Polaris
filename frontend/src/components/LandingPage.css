@@ -1,0 +1,124 @@
+.scroll-container {
+    width: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.landing-section {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    box-sizing: border-box;
+}
+
+/* First screen: fills the scroll area between nav and footer (see Layout .page-wrapper) */
+.landing-section--hero {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-block: 2rem;
+    box-sizing: border-box;
+}
+
+@supports (container-type: size) {
+    .landing-section--hero {
+        min-height: 100cqh;
+    }
+}
+
+@supports not (container-type: size) {
+    .landing-section--hero {
+        min-height: var(--snap-viewport);
+    }
+}
+
+.landing-section__inner {
+    text-align: center;
+}
+
+.landing-section__inner h1 {
+    margin: 0 0 0.75rem;
+    font-size: clamp(2rem, 5vw, 3rem);
+    letter-spacing: -0.02em;
+}
+
+.landing-section__tagline {
+    margin: 0;
+    font-size: 1.25rem;
+    opacity: 0.95;
+}
+/* Second screen: at least one full “page”; grows with content */
+.landing-section--description {
+    padding-block: 3rem 4rem;
+}
+
+@supports (container-type: size) {
+    .landing-section--description {
+        min-height: 100cqh;
+    }
+}
+
+@supports not (container-type: size) {
+    .landing-section--description {
+        min-height: var(--snap-viewport);
+    }
+}
+
+.landing-section__heading {
+    margin: 0 0 1.25rem;
+    font-size: 1.75rem;
+    color: #ffffff;
+}
+
+.blue-bg {
+    background: linear-gradient(135deg, #0c2340 50%, #1d3a5f 100%);
+    color: white;
+}
+
+.bg-color {
+    background: linear-gradient(to bottom, #122a49 50%, rgb(0, 0, 0) 100%),
+                linear-gradient(to right, #123054 50%, #1d3a5f 100%);
+    color: #ffffff;
+}
+
+.landing-section--description p {
+    line-height: 1.65;
+    font-size: 1.05rem;
+    text-align: left;
+    margin: 0 0 1.25rem;
+}
+
+.landing-section--description p:last-child {
+    margin-bottom: 0;
+}
+
+.landing-section__cta-wrap {
+    margin-top: 2rem;
+    margin-bottom: 0;
+    text-align: center;
+}
+
+.landing-section__cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.65rem 1.35rem;
+    border-radius: 999px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: #0c2340;
+    background: #ffffff;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-section__cta:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+.landing-section__cta:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 3px;
+}
