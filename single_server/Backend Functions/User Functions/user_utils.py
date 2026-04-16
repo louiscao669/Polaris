@@ -1,34 +1,84 @@
-### Utility functions for user management in the Polaris single server implementation
-from argon2 import PasswordHasher
 import secrets
+from datetime import datetime, timedelta, timezone
 
-def validate_credentials(username, password):
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
 
-    # FIND USER IN DATABASE AND RETRIEVE STORED PASSWORD HASH
-    
-    # COMPARE PROVIDED PASSWORD WITH STORED PASSWORD HASH
-    ph = PasswordHasher()
+_PASSWORD_HASHER = PasswordHasher()
+_SESSION_TTL = timedelta(days=7)
+
+
+def validate_credentials(cursor, username, password):
+    cursor.execute(
+        """
+        SELECT id, password_hash
+        FROM users
+        WHERE username = %s
+        """,
+        (username,),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return None
+
+    user_id, stored_password_hash = row
     try:
-        ph.verify(stored_password_hash, password)
-        return True
-    except:
+        if _PASSWORD_HASHER.verify(stored_password_hash, password):
+            return user_id
+    except (VerifyMismatchError, InvalidHashError):
+        return None
+
+    return None
+
+
+def validate_user_password(cursor, user_id, password):
+    cursor.execute(
+        """
+        SELECT password_hash
+        FROM users
+        WHERE id = %s
+        """,
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    if row is None:
         return False
 
-def generate_session_token(username):
-    # GENERATE A SECURE SESSION TOKEN
-    session_token = secrets.token_hex(32)
-    # STORE SESSION TOKEN IN DATABASE WITH ASSOCIATED USERNAME AND EXPIRATION TIME
-    return session_token
+    try:
+        return bool(_PASSWORD_HASHER.verify(row[0], password))
+    except (VerifyMismatchError, InvalidHashError):
+        return False
 
-def create_user(username, password_hash):
-    # INTERACT WITH DATABASE TO CREATE USER
-    return True
+
+def generate_session_token():
+    return secrets.token_hex(32)
+
+
+def create_session(cursor, db, user_id):
+    session_token = generate_session_token()
+    expires_at = datetime.now(timezone.utc) + _SESSION_TTL
+    cursor.execute(
+        """
+        INSERT INTO user_session (user_id, session_token, expires_at)
+        VALUES (%s, %s, %s)
+        """,
+        (user_id, session_token, expires_at),
+    )
+    db.commit()
+    return session_token, expires_at
+
 
 def hash_password(password):
-    # Hash the password using Argon2
-    ph = PasswordHasher()
-    return ph.hash(password)
+    return _PASSWORD_HASHER.hash(password)
 
-def invalidate_session(session_token):
-    # INTERACT WITH DATABASE TO INVALIDATE SESSION
-    return True
+
+def invalidate_session(cursor, db, session_token):
+    cursor.execute(
+        """
+        DELETE FROM user_session
+        WHERE session_token = %s
+        """,
+        (session_token,),
+    )
+    db.commit()
+    return cursor.rowcount > 0
