@@ -1,0 +1,285 @@
+use tmitch23;
+
+-- organization objects
+
+CREATE TABLE IF NOT EXISTS `organization` (
+    `org_id` int auto_increment primary key,
+    `name` varchar(255) not null,
+    `description` text
+);
+
+CREATE TABLE IF NOT EXISTS `users` (
+    `id` int auto_increment primary key,
+    `first` varchar(100) not null,
+    `last` varchar(100) not null,
+    `age` int,
+    `email` varchar(255) not null,
+    `username` varchar(100) not null unique,
+    `password_hash` varchar(255) not null
+);
+
+CREATE TABLE IF NOT EXISTS `organization_role` (
+    `org_id` int not null,
+    `role` varchar(100) not null,
+    `description` text,
+    primary key (`org_id`, `role`),
+    constraint `fk_org_role_org`
+        foreign key (`org_id`) references `organization`(`org_id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `organization_token` (
+    `token_id` int auto_increment primary key,
+    `org_id` int not null,
+    `name` varchar(255) not null,
+    `description` text,
+    constraint `fk_org_token_org`
+        foreign key (`org_id`) references `organization`(`org_id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `organization_leader` (
+    `org_id` int primary key,
+    `user_id` int not null,
+    constraint `fk_org_leader_org`
+        foreign key (`org_id`) references `organization`(`org_id`)
+        on delete cascade,
+    constraint `fk_org_leader_user`
+        foreign key (`user_id`) references `users`(`id`)
+        on delete cascade
+);
+
+-- user objects
+
+CREATE TABLE IF NOT EXISTS `user_org_role` (
+    `org_id` int not null,
+    `role_id` varchar(100) not null,
+    `user_id` int not null,
+    primary key (`org_id`, `user_id`),
+    constraint `fk_user_org_role_org_role`
+        foreign key (`org_id`, `role_id`) references `organization_role`(`org_id`, `role`)
+        on delete cascade,
+    constraint `fk_user_org_role_user`
+        foreign key (`user_id`) references `users`(`id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `user_token_stock` (
+    `token_id` int not null,
+    `user_id` int not null,
+    `qty` int not null default 0,
+    primary key (`token_id`, `user_id`),
+    constraint `fk_user_token_stock_token`
+        foreign key (`token_id`) references `organization_token`(`token_id`)
+        on delete cascade,
+    constraint `fk_user_token_stock_user`
+        foreign key (`user_id`) references `users`(`id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `user_session` (
+    `session_id` int auto_increment primary key,
+    `user_id` int not null,
+    `created_at` timestamp not null default current_timestamp,
+    `expires_at` timestamp not null,
+    constraint `fk_user_session_user`
+        foreign key (`user_id`) references `users`(`id`)
+        on delete cascade
+);
+
+-- constraint definitions
+
+CREATE TABLE IF NOT EXISTS `constraint_type` (
+    `constraint_id` int primary key,
+    `name` varchar(100) not null unique,
+    `description` varchar(255)
+);
+
+-- event objects
+
+CREATE TABLE IF NOT EXISTS `events` (
+    `event_id` int auto_increment primary key,
+    `org_id` int not null,
+    `caption` varchar(255) not null,
+    `is_open` boolean not null default true,
+    constraint `fk_event_org`
+        foreign key (`org_id`) references `organization`(`org_id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `event_tokens_allowed` (
+    `event_id` int not null,
+    `token_id` int not null,
+    primary key (`event_id`, `token_id`),
+    constraint `fk_event_tokens_allowed_event`
+        foreign key (`event_id`) references `events`(`event_id`)
+        on delete cascade,
+    constraint `fk_event_tokens_allowed_token`
+        foreign key (`token_id`) references `organization_token`(`token_id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `event_constraints` (
+    `event_id` int not null,
+    `constraint_id` int not null,
+    `constraint_value` int not null,
+    primary key (`event_id`, `constraint_id`),
+    constraint `fk_event_constraints_event`
+        foreign key (`event_id`) references `events`(`event_id`)
+        on delete cascade,
+    constraint `fk_event_constraints_type`
+        foreign key (`constraint_id`) references `constraint_type`(`constraint_id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `event_open_to` (
+    `event_id` int not null,
+    `org_id` int not null,
+    `role_id` varchar(100) not null,
+    primary key (`event_id`, `org_id`, `role_id`),
+    constraint `fk_event_open_to_event`
+        foreign key (`event_id`) references `events`(`event_id`)
+        on delete cascade,
+    constraint `fk_event_open_to_org_role`
+        foreign key (`org_id`, `role_id`) references `organization_role`(`org_id`, `role`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `event_market_creators` (
+    `event_id` int not null,
+    `user_id` int not null,
+    primary key (`event_id`, `user_id`),
+    constraint `fk_event_market_creators_event`
+        foreign key (`event_id`) references `events`(`event_id`)
+        on delete cascade,
+    constraint `fk_event_market_creators_user`
+        foreign key (`user_id`) references `users`(`id`)
+        on delete cascade
+);
+
+-- market objects
+
+CREATE TABLE IF NOT EXISTS `market` (
+    `id` int auto_increment primary key,
+    `event_id` int not null,
+    `question` varchar(500) not null,
+    `is_open` boolean not null default true,
+    `created_by` int not null,
+    `created_at` timestamp not null default current_timestamp,
+    `close_at` timestamp null,
+    constraint `fk_market_event`
+        foreign key (`event_id`) references `events`(`event_id`)
+        on delete cascade,
+    constraint `fk_market_created_by`
+        foreign key (`created_by`) references `users`(`id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `market_constraint` (
+    `constraint_id` int not null,
+    `market_id` int not null,
+    `constraint_value` int not null,
+    primary key (`constraint_id`, `market_id`),
+    constraint `fk_market_constraint_market`
+        foreign key (`market_id`) references `market`(`id`)
+        on delete cascade,
+    constraint `fk_market_constraint_type`
+        foreign key (`constraint_id`) references `constraint_type`(`constraint_id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `market_as` (
+    `as_code` varchar(50) primary key,
+    `description` varchar(255) not null
+);
+
+INSERT IGNORE INTO `market_as` (`as_code`, `description`) VALUES
+('better', 'can place bets in the market'),
+('viewer', 'can view market data'),
+('analytic', 'can access market analytics');
+
+CREATE TABLE IF NOT EXISTS `market_open_to_as` (
+    `market_id` int not null,
+    `org_id` int not null,
+    `role_id` varchar(100) not null,
+    `as_id` varchar(50) not null,
+    primary key (`market_id`, `org_id`, `role_id`),
+    constraint `fk_market_open_to_as_market`
+        foreign key (`market_id`) references `market`(`id`)
+        on delete cascade,
+    constraint `fk_market_open_to_as_org_role`
+        foreign key (`org_id`, `role_id`) references `organization_role`(`org_id`, `role`)
+        on delete cascade,
+    constraint `fk_market_open_to_as_as`
+        foreign key (`as_id`) references `market_as`(`as_code`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `market_tokens_allowed` (
+    `market_id` int not null,
+    `token_id` int not null,
+    primary key (`market_id`, `token_id`),
+    constraint `fk_market_tokens_allowed_market`
+        foreign key (`market_id`) references `market`(`id`)
+        on delete cascade,
+    constraint `fk_market_tokens_allowed_token`
+        foreign key (`token_id`) references `organization_token`(`token_id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `market_transaction` (
+    `transaction_id` int not null,
+    `market_id` int not null,
+    `token_id` int not null,
+    `amt` int not null,
+    `ts` timestamp not null default current_timestamp,
+    `user_id` int not null,
+    `price` int not null,
+    `side` boolean not null,
+    primary key (`market_id`, `transaction_id`),
+    constraint `fk_market_transaction_market`
+        foreign key (`market_id`) references `market`(`id`)
+        on delete cascade,
+    constraint `fk_market_transaction_token`
+        foreign key (`token_id`) references `organization_token`(`token_id`)
+        on delete cascade,
+    constraint `fk_market_transaction_user`
+        foreign key (`user_id`) references `users`(`id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `market_result` (
+    `market_id` int primary key,
+    `outcome` boolean not null,
+    `resolved_at` timestamp not null default current_timestamp,
+    constraint `fk_market_result_market`
+        foreign key (`market_id`) references `market`(`id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `user_market_shares` (
+    `user_id` int not null,
+    `market_id` int not null,
+    `outcome` boolean not null,
+    `shares` int not null default 0,
+    `avg_price` int not null default 0,
+    primary key (`user_id`, `market_id`, `outcome`),
+    constraint `fk_user_market_shares_user`
+        foreign key (`user_id`) references `users`(`id`)
+        on delete cascade,
+    constraint `fk_user_market_shares_market`
+        foreign key (`market_id`) references `market`(`id`)
+        on delete cascade
+);
+
+CREATE TABLE IF NOT EXISTS `market_price_snapshot` (
+    `market_id` int not null,
+    `outcome_id` boolean not null,
+    `price` int not null,
+    `liquidity` int not null,
+    `ts` timestamp not null default current_timestamp,
+    primary key (`market_id`, `outcome_id`, `ts`),
+    constraint `fk_market_price_snapshot_market`
+        foreign key (`market_id`) references `market`(`id`)
+        on delete cascade
+);

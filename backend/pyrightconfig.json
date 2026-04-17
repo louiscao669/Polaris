@@ -1,0 +1,8 @@
+{
+  "extraPaths": [
+    "single_server/Backend Functions/Market Functions",
+    "single_server/Backend Functions/Event Functions",
+    "single_server/Backend Functions/Organization Functions",
+    "single_server/Backend Functions/User Functions"
+  ]
+}

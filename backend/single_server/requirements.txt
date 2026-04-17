@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pydantic
+pymysql>=1.1
+mysql-connector-python>=8.0
+python-dotenv>=1.0

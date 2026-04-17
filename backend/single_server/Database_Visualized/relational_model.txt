@@ -1,0 +1,151 @@
+### User Objects ###
+
+USER:
+* PK: id
+id: int
+first: string
+last: string
+age: int
+email: string
+username: string (UNIQUE)
+password_hash: string
+
+USER_ORG_ROLE:
+* PK: org_id, user_id
+org_id: external key
+role_id: external key
+user_id: external key
+
+USER_TOKEN_STOCK:
+* PK: token_id, user_id
+token_id: external key
+qty: int
+user_id: external key
+
+USER_MARKET_SHARES:
+user_id: external id
+market_id: external id
+outcome: boolean
+shares: int
+avg_price: int
+
+USER_SESSION:
+* PK: session_id
+session_id: int
+user_id: external key
+created_at: timestamp
+expires_at: timestamp
+
+### Market Objects ###
+
+MARKET:
+* PK: id
+id: int
+event_id: external key
+question: string
+open: boolean
+created_by: external id
+created_at: timestamp
+close_at: timestamp
+
+MARKET_CONSTRAINT:
+* PK: constraint_id, market_id
+constraint_id: external key
+market_id: external key
+
+MARKET_OPEN_TO_AS: 
+* PK: market_id, org_id, role_id
+market_id: external key
+org_id: external key
+role_id: external key
+as_id: external key
+
+MARKET_TRANSACTION:
+* PK: market_id, transaction_id
+transaction_id: int
+market_id: external key
+token_id: external key
+amt: int
+ts: timestamp
+user_id: external id
+price: int
+side: boolean
+
+MARKET_TOKENS_ALLOWED:
+* PK: market_id, token_id
+market_id: external key
+token_id: external key
+
+MARKET_RESULT:
+* PK: market_id
+outcome: boolean
+resolved_at: timestamp
+
+MARKET_AS: (BETTER, VIEWER, ANALYTIC)
+* PK: as
+as: string
+description: string
+
+MARKET_PRICE_SNAPSHOT:
+* pk: timestamp, market_id
+market_id: external key
+outcome_id: boolean
+price: int
+liquidity: int
+ts: timestamp
+
+### Event Objects ###
+
+EVENT:
+* PK: event_id
+event_id: int
+org_id: external id
+caption: string
+open: boolean
+
+EVENT_TOKENS_ALLOWED:
+* PK: event_id, token_id
+event_id: external key
+token_id: external key
+
+EVENT_CONTRAINTS:
+* PK: event_id, constraint_id
+event_id: external key
+constraint_id: external key
+
+EVENT_OPEN_TO:
+* PK: event_id, org_id, role_id
+event_id: external key
+org_id: external key
+role_id: external_key
+
+EVENT_MARKET_CREATORS: (who can create a market)
+* PK: event_id, user_id
+event_id: external key
+user_id: external key
+
+### Organization Objects ###
+
+ORGANIZATION:
+* PK: org_id
+org_id: int
+name: string
+description: string
+
+ORGANIZATION_LEADER: (who can create an event)
+* PK: org_id
+user_id: external key
+org_id: external key
+
+ORGANIZATION_ROLE: (org specific)
+* PK: role, external key
+role: string
+org_id: external key
+description: string
+
+ORGANIZATION_TOKEN:
+* PK: token_id
+token_id: int
+org_id: external key
+name: string
+description: string

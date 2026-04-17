@@ -1,0 +1,10 @@
+{
+  "include": ["."],
+  "extraPaths": [
+    "Backend Functions/Market Functions",
+    "Backend Functions/Event Functions",
+    "Backend Functions/Organization Functions",
+    "Backend Functions/User Functions"
+  ],
+  "reportMissingImports": true
+}

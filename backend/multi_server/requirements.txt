@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+pydantic
+pymysql>=1.1
+argon2-cffi>=23.1.0

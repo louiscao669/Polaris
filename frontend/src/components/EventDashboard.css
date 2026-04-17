@@ -1,0 +1,209 @@
+.event-page {
+  min-height: 100%;
+  color: #f3f7ff;
+  background: linear-gradient(180deg, #0c2340 0%, #102a49 55%, #14375c 100%);
+}
+
+.event-shell {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+.event-kicker {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #90b6ff;
+}
+
+.event-shell h1 {
+  margin: 0.35rem 0 0.6rem;
+  color: #ffffff;
+}
+
+.event-subtitle {
+  margin: 0;
+  color: #d4e2ff;
+}
+
+.event-actions {
+  margin-top: 1rem;
+}
+
+.event-actions a {
+  color: #90b6ff;
+  text-decoration: none;
+}
+
+.event-actions a:hover {
+  text-decoration: underline;
+}
+
+.event-dashboard-content {
+  margin-top: 1.2rem;
+}
+
+.event-dashboard-content__header h2 {
+  margin: 0 0 0.5rem;
+  color: #ffffff;
+}
+
+.event-dashboard-content__header p {
+  margin: 0;
+  color: #d4e2ff;
+}
+
+.event-card {
+  padding: 1rem;
+  border-radius: 14px;
+  background: rgba(9, 22, 40, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.event-card h2 {
+  margin: 0 0 0.6rem;
+  color: #ffffff;
+  font-size: 1.2rem;
+}
+
+.event-card h3 {
+  margin: 0 0 0.6rem;
+  color: #ffffff;
+}
+
+.event-card ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #d4e2ff;
+}
+
+.event-card li + li {
+  margin-top: 0.45rem;
+}
+
+.event-muted {
+  margin: 0;
+  color: #b9ccf3;
+}
+
+.binary-market-grid {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.binary-market-card {
+  padding: 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(9, 22, 40, 0.65);
+}
+
+.binary-market-card h3 {
+  margin: 0 0 0.4rem;
+  color: #ffffff;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.binary-market-card__meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #b9ccf3;
+}
+
+.binary-market-card__odds {
+  margin-top: 0.7rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.odds-pill {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.odds-pill--yes {
+  color: #a8f0c0;
+  background: rgba(40, 136, 73, 0.25);
+}
+
+.odds-pill--no {
+  color: #ffd6d6;
+  background: rgba(150, 56, 56, 0.3);
+}
+
+.role-dashboard-grid {
+  margin-top: 1rem;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.event-checklist {
+  list-style: disc inside !important;
+  margin: 0;
+  padding: 0;
+}
+
+.event-checklist li {
+  display: list-item;
+  padding: 0.45rem 0;
+  border-bottom: 0;
+  color: #d4e2ff;
+}
+
+.analyze-btn {
+  margin-top: 0.8rem;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #0c2340;
+  background: #ffffff;
+}
+
+.event-card--tokens {
+  margin-top: 1rem;
+}
+
+.token-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.token-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.token-list li:last-child {
+  border-bottom: 0;
+}
+
+.token-list strong {
+  color: #ffffff;
+}
+
+.token-list p {
+  margin: 0.25rem 0 0;
+  color: #d4e2ff;
+  font-size: 0.9rem;
+}
+
+.token-list span {
+  color: #b9ccf3;
+  white-space: nowrap;
+}
