@@ -71,6 +71,7 @@ export default function SignIn(props) {
   const [passwordErrorMessage, setPasswordErrorMessage] = React.useState('');
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
+  const [serverError, setServerError] = React.useState('');
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -84,8 +85,12 @@ export default function SignIn(props) {
     event.preventDefault();
     if (!validateInputs()) return;
     setLoading(true);
+    setServerError('');
     const data = new FormData(event.currentTarget);
-    const payload = Object.fromEntries(data);
+    const payload = {
+      email: String(data.get('email') ?? '').trim(),
+      password: String(data.get('password') ?? ''),
+    };
     try {
       const response = await fetch('http://localhost:8000/auth/login', {
         method: 'POST',
@@ -103,10 +108,19 @@ export default function SignIn(props) {
         }
         return;
       }
+      const detail = result?.detail;
+      const msg =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d) => d?.msg ?? JSON.stringify(d)).join('; ')
+            : 'Login failed.';
+      setServerError(msg);
       console.error('Backend validation details:', result.detail);
       console.error('Login failed:', result.message);
     } catch (error) {
       console.error('Network error or server is down:', error);
+      setServerError('Cannot reach server. Is the API running on http://localhost:8000?');
     } finally {
       setLoading(false);
     }
@@ -121,9 +135,9 @@ export default function SignIn(props) {
     const idVal = email.value?.trim() ?? '';
     if (!idVal) {
       setEmailError(true);
-      setEmailErrorMessage('Enter your email or username.');
+      setEmailErrorMessage('Enter your email.');
       isValid = false;
-    } else if (idVal.includes('@') && !/\S+@\S+\.\S+/.test(idVal)) {
+    } else if (!/\S+@\S+\.\S+/.test(idVal)) {
       setEmailError(true);
       setEmailErrorMessage('Please enter a valid email address.');
       isValid = false;
@@ -173,15 +187,15 @@ export default function SignIn(props) {
             }}
           >
             <FormControl>
-              <FormLabel htmlFor="email">Email or username</FormLabel>
+              <FormLabel htmlFor="email">Email</FormLabel>
               <TextField
                 error={emailError}
                 helperText={emailErrorMessage}
                 id="email"
-                type="text"
+                type="email"
                 name="email"
-                placeholder="you@example.com or your_username"
-                autoComplete="username"
+                placeholder="you@example.com"
+                autoComplete="email"
                 autoFocus
                 required
                 fullWidth
@@ -199,7 +213,6 @@ export default function SignIn(props) {
                 type="password"
                 id="password"
                 autoComplete="current-password"
-                autoFocus
                 required
                 fullWidth
                 variant="outlined"
@@ -215,10 +228,16 @@ export default function SignIn(props) {
               type="submit"
               fullWidth
               variant="contained"
+              disabled={loading}
               onClick={validateInputs}
             >
-              Sign in
+              {loading ? 'Signing in…' : 'Sign in'}
             </Button>
+            {serverError ? (
+              <Typography variant="body2" color="error" sx={{ textAlign: 'center' }}>
+                {serverError}
+              </Typography>
+            ) : null}
             <Link
               component="button"
               type="button"

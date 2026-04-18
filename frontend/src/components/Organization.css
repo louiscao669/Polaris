@@ -29,6 +29,73 @@
   color: #90b6ff;
 }
 
+.organization-membership {
+  margin-top: 1.1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: rgba(9, 22, 40, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  max-width: 42rem;
+}
+
+.organization-membership__label {
+  display: block;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #90b6ff;
+  margin-bottom: 0.35rem;
+}
+
+.organization-membership__value {
+  margin: 0;
+  color: #e8f0ff;
+  line-height: 1.5;
+}
+
+.organization-membership__value strong {
+  display: block;
+  font-size: 1.05rem;
+  color: #ffffff;
+  margin-bottom: 0.2rem;
+}
+
+.organization-membership__hint {
+  display: block;
+  font-size: 0.88rem;
+  color: #b9ccf3;
+  font-weight: 400;
+}
+
+.organization-membership--loading .organization-membership__value {
+  color: #b9ccf3;
+}
+
+.organization-membership--leader {
+  border-left: 4px solid #5ce1a8;
+}
+
+.organization-membership--member {
+  border-left: 4px solid #7eb6ff;
+}
+
+.organization-membership--guest {
+  border-left: 4px solid rgba(255, 255, 255, 0.35);
+}
+
+.organization-membership--guest a {
+  color: #b8d4ff;
+  font-weight: 600;
+}
+
+.organization-membership--error {
+  border-left: 4px solid #ff8a8a;
+}
+
+.organization-membership--error .organization-membership__value {
+  color: #ffc9c9;
+}
+
 .organization-actions {
   display: flex;
   gap: 0.75rem;

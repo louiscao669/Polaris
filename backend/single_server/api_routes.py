@@ -56,26 +56,6 @@ from dashboard_queries import (
 router = APIRouter()
 
 
-def _resolve_login_username(cursor, identifier: str) -> str:
-    """user_login authenticates via users.username; also allow matching users.email."""
-    identifier = (identifier or "").strip()
-    if not identifier:
-        return identifier
-    cursor.execute(
-        """
-        SELECT username FROM users
-        WHERE username = %s OR email = %s
-        LIMIT 1
-        """,
-        (identifier, identifier),
-    )
-    row = cursor.fetchone()
-    if row is None:
-        return identifier
-    u = row[0]
-    return u.decode("utf-8") if isinstance(u, (bytes, bytearray)) else str(u)
-
-
 def _call_db(conn, fn, *args: Any):
     """This helper only
     handles unexpected **MySQL driver** errors (rollback + 500).
@@ -563,7 +543,7 @@ class SignupBody(BaseModel):
     age: int | None = None
 
 class LoginBody(BaseModel):
-    email: str  # Username or email (matches sign-in form field name)
+    email: str  # Sign-in form uses this field for the user's email (resolved to username server-side)
     password: str
 
 
@@ -573,12 +553,9 @@ class LogoutBody(BaseModel):
 
 @router.post("/auth/login")
 def http_login(body: LoginBody, conn=Depends(get_db)):
-    cur = conn.cursor(buffered=True)
-    try:
-        username = _resolve_login_username(cur, body.email)
-    finally:
-        cur.close()
-    return _unwrap_result(_call_db(conn, user_login, username, body.password))
+    return _unwrap_result(
+        _call_db(conn, user_login, (body.email or "").strip(), body.password)
+    )
 
 
 @router.post("/auth/signup")

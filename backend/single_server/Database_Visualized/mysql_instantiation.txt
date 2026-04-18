@@ -96,8 +96,10 @@ CREATE TABLE IF NOT EXISTS `user_market_ticket` (
 CREATE TABLE IF NOT EXISTS `user_session` (
     `session_id` int auto_increment primary key,
     `user_id` int not null,
+    `session_token` varchar(64) not null,
     `created_at` timestamp not null default current_timestamp,
     `expires_at` timestamp not null,
+    unique key `uq_user_session_token` (`session_token`),
     constraint `fk_user_session_user`
         foreign key (`user_id`) references `users`(`id`)
         on delete cascade

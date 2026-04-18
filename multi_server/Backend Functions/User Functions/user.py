@@ -1,1 +1,0 @@
-"""Prefer `user_authenticity` for login, signup, and logout."""

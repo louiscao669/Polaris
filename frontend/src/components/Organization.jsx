@@ -2,6 +2,7 @@ import './Organization.css';
 import { Link, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import OrganizationMembership from './OrganizationMembership';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -196,6 +197,19 @@ function Organization() {
             ? orgData.description
             : 'Manage events, monitor market activity, and keep your organization aligned with transparent forecasting.'}
           </p>
+          {userId ? (
+            <OrganizationMembership organizationId={organizationId} userId={userId} />
+          ) : (
+            <div className="organization-membership organization-membership--guest" role="note">
+              <span className="organization-membership__label">Your role</span>
+              <p className="organization-membership__value">
+                <Link to="/signin">Sign in</Link>
+                {' '}
+                and open this page from your dashboard (with your user id) to see whether you are a
+                leader or member.
+              </p>
+            </div>
+          )}
           <div className="organization-actions">
             <button type="button" onClick={handleCreateNewEvent}>Create New Event</button>
             <button type="button" className="organization-actions__secondary">

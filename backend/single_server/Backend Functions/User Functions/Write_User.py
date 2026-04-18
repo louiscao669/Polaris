@@ -16,9 +16,9 @@ from user_utils import (
     validate_user_password,
 )
 
-def user_login(cursor, db, username, password):
+def user_login(cursor, db, login_identifier, password):
     try:
-        user_id = validate_credentials(cursor, username, password)
+        user_id = validate_credentials(cursor, login_identifier, password)
         if user_id is None:
             return _fail("auth", "Invalid username or password.")
 
