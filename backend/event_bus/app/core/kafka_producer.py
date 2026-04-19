@@ -1,3 +1,23 @@
+"""Legacy multi-topic Kafka producer.
+
+MSK / IAM is configured in ``kafka_aiokafka_common.aiokafka_common_kwargs()`` when
+``KAFKA_USE_MSK_IAM=true`` — this file only adds serializers and ``enable_idempotence``.
+
+Equivalent to AWS IAM auth for Python **aiokafka**:
+
+- ``bootstrap_servers`` ← ``KAFKA_BOOTSTRAP_SERVERS`` (e.g. MSK bootstrap on port **9098**)
+- ``security_protocol=SASL_SSL``
+- ``sasl_mechanism=OAUTHBEARER`` (**not** ``AWS_MSK_IAM``, which is Java naming; aiokafka
+  uses **OAUTHBEARER** plus a bearer token provider)
+- ``sasl_oauth_token_provider``: ``MskIamTokenProvider(region)`` →
+  ``MSKAuthTokenProvider.generate_auth_token(region)`` from ``aws-msk-iam-sasl-signer-python``
+
+Also set ``KAFKA_MSK_REGION`` (e.g. ``us-east-2``). AWS credentials come from the instance /
+task IAM role or standard credential chain — not inline in code.
+
+Environment: ``KAFKA_USE_MSK_IAM``, ``KAFKA_MSK_REGION``, ``KAFKA_BOOTSTRAP_SERVERS``.
+"""
+
 import json
 import time
 from typing import Any, Optional
@@ -43,6 +63,7 @@ class KafkaProducerManager:
         await self._require_producer().send_and_wait(topic, payload, **kwargs)
 
     async def connect(self) -> None:
+        # Shared bootstrap + optional MSK IAM (SASL_SSL / OAUTHBEARER / token provider).
         kwargs = aiokafka_common_kwargs()
         kwargs.update(
             {
