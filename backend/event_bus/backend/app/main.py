@@ -1,188 +1,96 @@
 # app/main.py
 
 import asyncio
-from fastapi import FastAPI
+import os
 from contextlib import asynccontextmanager
-
-from backend.app.core.kafka_producer import kafka_producer
 from typing import Optional
 
-from backend.app.core.kafka_server import ENGINE_TOPICS, PolarisEngineNode, NodeState
+from fastapi import FastAPI
 
+from backend.app.core.kafka_producer import kafka_producer
+from backend.app.core.kafka_server import ENGINE_TOPICS, PolarisEngineNode, NodeState
+from backend.app.database import create_db_and_tables
+from backend.app.settings_app import (
+    POLARIS_ENABLE_LEGACY_CONSUMER,
+    POLARIS_ENABLE_V2_WORKER,
+)
+from backend.app.settings_worker import worker_topics_and_group
+from backend.app.v2_kafka_client import v2_kafka_producer
+from backend.app.v2_kafka_worker import PolarisV2Worker
+from backend.app.v2_routes import router as v2_router
+from dotenv import load_dotenv
+load_dotenv()
 
 SERVER_ID = 0
 TOTAL_NODES = 1
 
 consumer_manager: Optional[PolarisEngineNode] = None
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
     global consumer_manager
 
-    print(f"Polaris Node {SERVER_ID} booting...")
+    print(f"Polaris Node {SERVER_ID} booting...", flush=True)
+
+    if os.getenv("POLARIS_BOOTSTRAP_DB", "").strip().lower() in {"1", "true", "yes"}:
+        create_db_and_tables()
 
     await kafka_producer.connect()
+    await v2_kafka_producer.connect()
 
-    node_state = NodeState()
+    consumer_task: asyncio.Task | None = None
+    v2_worker_task: asyncio.Task | None = None
 
-    consumer_manager = PolarisEngineNode(
-        topic="all",
-        server_id=SERVER_ID,
-        state=node_state,
-        total_servers=TOTAL_NODES,
-    )
-    
-    consumer_task = asyncio.create_task(
-        consumer_manager.start_listening()
-    )
+    if POLARIS_ENABLE_LEGACY_CONSUMER:
+        node_state = NodeState()
+        consumer_manager = PolarisEngineNode(
+            topic="all",
+            server_id=SERVER_ID,
+            state=node_state,
+            total_servers=TOTAL_NODES,
+        )
+        consumer_task = asyncio.create_task(consumer_manager.start_listening())
+
+    if POLARIS_ENABLE_V2_WORKER:
+        topics, group_id = worker_topics_and_group()
+        vw = PolarisV2Worker(topics, group_id)
+        v2_worker_task = asyncio.create_task(vw.run_forever())
 
     yield
 
-    print("Polaris shutting down...")
+    print("Polaris shutting down...", flush=True)
 
-    consumer_task.cancel()
-    await asyncio.gather(consumer_task, return_exceptions=True)
+    if consumer_task is not None:
+        consumer_task.cancel()
+        await asyncio.gather(consumer_task, return_exceptions=True)
+
+    if v2_worker_task is not None:
+        v2_worker_task.cancel()
+        await asyncio.gather(v2_worker_task, return_exceptions=True)
 
     await kafka_producer.disconnect()
+    await v2_kafka_producer.disconnect()
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(v2_router)
 
 
 @app.get("/")
 async def root():
-    if consumer_manager is None:
-        return {"message": "Polaris API starting", "node_id": SERVER_ID}
+    legacy_topics = (
+        list(ENGINE_TOPICS) if consumer_manager is not None else []
+    )
     return {
-        "message": "Polaris API active",
+        "message": "Polaris API",
         "node_id": SERVER_ID,
-        "subscribed_topics": list(ENGINE_TOPICS),
+        "legacy_consumer_topics": legacy_topics,
+        "legacy_consumer_enabled": POLARIS_ENABLE_LEGACY_CONSUMER,
+        "v2_worker_embedded": POLARIS_ENABLE_V2_WORKER,
     }
 
 
-# -------------------------
-# TEST ENDPOINTS
-# -------------------------
-
-
-@app.post("/test/create-market")
-async def test_create_market(market_id: str = "BTC-USD"):
-    
-    await kafka_producer.create_market(
-        market_id,
-        owner=f"Node_{SERVER_ID}"
-    )
-
-    # await asyncio.sleep(1)
-    # print("markets", consumer_manager.state.markets)
-    # print("orders", consumer_manager.state.order_books)
-    # print(f"DEBUG: State ID is {id(consumer_manager.state)}")
-
-    return {
-        "status": "CREATE command sent",
-        "market_id": market_id
-    }
-
-@app.post("/test/update-market")
-async def test_update_market(market_id: str = "BTC-USD"):
-    
-    await kafka_producer.update_market(
-        market_id,
-        {"min_tick": 1}
-    )
-
-    # await asyncio.sleep(1)
-    # print("markets", consumer_manager.state.markets)
-    # print("orders", consumer_manager.state.order_books)
-    # print(f"DEBUG: State ID is {id(consumer_manager.state)}")
-
-    return {
-        "status": "UPDATE command sent",
-        "market_id": market_id
-    }
-
-@app.post("/test/place-order")
-async def test_place_order(
-    market_id: str = "BTC-USD",
-    side: str = "BUY",
-    price: float = 50000.0,
-    volume: float = 1.0
-):
-
-    order_id = await kafka_producer.place_order(
-        market_id=market_id,
-        user_id="test_user",
-        side=side.upper(),
-        volume=volume,
-        price=price
-    )
-
-    # await asyncio.sleep(1)
-    # print("markets", consumer_manager.state.markets)
-    # print("orders", consumer_manager.state.order_books)
-
-    return {
-        "status": "Order placed",
-        "order_id": order_id
-    }
-
-
-@app.get("/test/inspect-book")
-async def inspect_book(market_id: str = "BTC-USD"):
-    assert consumer_manager is not None
-    state = consumer_manager.state
-    book = state.order_books.get(
-        market_id,
-        {"bids": [], "asks": []}
-    )
-
-    # await asyncio.sleep(1)
-    # print("markets", consumer_manager.state.markets)
-    # print("orders", consumer_manager.state.order_books)
-
-    return {
-        "market_id": market_id,
-        "known_markets": list(state.markets.keys()),
-        "bids_count": len(book["bids"]),
-        "asks_count": len(book["asks"]),
-        "book": book
-    }
-
-
-@app.get("/test/inspect-market")
-async def inspect_market(market_id: str = "BTC-USD"):
-    assert consumer_manager is not None
-    market = consumer_manager.state.markets
-    return market
-
-@app.post("/test/trigger-sync")
-async def trigger_sync(target_node_id: int = 0):
-    assert consumer_manager is not None
-
-    # if target_node_id == SERVER_ID:
-    #     return {"error": "Cannot sync with yourself"}
-
-    current_markets = list(
-        consumer_manager.state.markets.keys()
-    )
-    print(consumer_manager.state.order_books)
-
-    print(f"Node {SERVER_ID} requesting sync from {target_node_id}")
-    print("Known markets", consumer_manager.state.markets)
-
-    await kafka_producer.request_state_sync(
-        node_id=SERVER_ID,
-        target_node=target_node_id,
-    )
-
-    # await asyncio.sleep(1)
-    # print("markets", consumer_manager.state.markets)
-    # print("orders", consumer_manager.state.order_books)
-
-    return {
-        "status": "sync request sent",
-        "requester": SERVER_ID,
-        "target": target_node_id,
-        "known_markets": current_markets,
-    }
+@app.get("/health")
+async def health():
+    return {"status": "ok"}

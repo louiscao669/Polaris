@@ -486,3 +486,11 @@ def sync_points_m(data: dict[str, Any]) -> None:
             (market_id, span),
         )
         print(f"POINTS market={market_id} rows={_rows(cur)}")
+
+
+def sync_user_account_message(data: dict[str, Any]) -> None:
+    """Apply user.account domain messages (extend as handlers are added)."""
+    action = data.get("action")
+    if action == "TEST_PING":
+        return
+    raise ValueError(f"unsupported user.account action: {action!r}")

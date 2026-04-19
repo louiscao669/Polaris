@@ -4,6 +4,8 @@ from typing import Any, Optional
 
 from aiokafka import AIOKafkaProducer
 
+from backend.app.kafka_aiokafka_common import aiokafka_common_kwargs
+
 # Topics for multi_server domain parity (see multi_server/Backend Functions)
 TOPIC_ORGANIZATION = "organization.lifecycle"
 TOPIC_PLATFORM_EVENT = "platform.event.lifecycle"
@@ -41,11 +43,15 @@ class KafkaProducerManager:
         await self._require_producer().send_and_wait(topic, payload, **kwargs)
 
     async def connect(self) -> None:
-        self.producer = AIOKafkaProducer(
-            bootstrap_servers="localhost:9092",
-            enable_idempotence=True,
-            value_serializer=lambda v: json.dumps(v).encode(),
+        kwargs = aiokafka_common_kwargs()
+        kwargs.update(
+            {
+                "enable_idempotence": True,
+                "value_serializer": lambda v: json.dumps(v).encode(),
+            }
         )
+
+        self.producer = AIOKafkaProducer(**kwargs)
         await self.producer.start()
 
     async def disconnect(self) -> None:
