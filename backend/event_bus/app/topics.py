@@ -1,5 +1,5 @@
 """Canonical Kafka topic names for Polaris v2 (MSK + IAM)."""
-
+from typing import Optional
 MARKET_OPERATIONS = "market.operations"
 MARKET_OPERATIONS_DLQ = "market.operations.dlq"
 
@@ -20,5 +20,5 @@ V2_DLQ_BY_TOPIC: dict[str, str] = {
 }
 
 
-def dlq_for(topic: str) -> str | None:
+def dlq_for(topic: str) -> Optional[str]:
     return V2_DLQ_BY_TOPIC.get(topic)

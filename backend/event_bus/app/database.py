@@ -123,6 +123,14 @@ def _split_mysql_statements(sql: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+def _is_use_database_statement(stmt: str) -> bool:
+    """DDL files often start with ``USE oldname;`` — we already ``select_db(DB_NAME)``."""
+    s = stmt.strip().lower().rstrip(";").strip()
+    if len(s) < 5:
+        return False
+    return s.startswith("use ") and not s.startswith("use index")
+
+
 def _load_mysql_ddl() -> str:
     if not MYSQL_DDL_PATH.is_file():
         raise FileNotFoundError(f"MySQL DDL file not found: {MYSQL_DDL_PATH}")
@@ -144,10 +152,14 @@ def create_db_and_tables() -> None:
         conn.select_db(DB_NAME)
         with conn.cursor() as cur:
             for stmt in statements:
+                if _is_use_database_statement(stmt):
+                    continue
                 cur.execute(stmt)
             if MYSQL_OPERATIONS_EXT_PATH.is_file():
                 ext = MYSQL_OPERATIONS_EXT_PATH.read_text(encoding="utf-8")
                 for stmt in _split_mysql_statements(ext):
+                    if _is_use_database_statement(stmt):
+                        continue
                     cur.execute(stmt)
     finally:
         conn.close()

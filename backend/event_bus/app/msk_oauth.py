@@ -1,20 +1,27 @@
-"""MSK IAM (SASL/OAUTHBEARER) token helpers for aiokafka.
+"""MSK IAM (SASL/OAUTHBEARER) helpers for aiokafka + Amazon MSK.
 
-Tutorial-style synchronous token::
+Tutorial pattern you may see::
 
     from aws_msk_iam_sasl_signer import MSKAuthTokenProvider
 
-    def get_msk_auth_token(region: str) -> str:
-        token, _ = MSKAuthTokenProvider.generate_auth_token(region)
+    def oauth_cb(args):  # or oauth_cb()
+        token, expiry = MSKAuthTokenProvider.generate_auth_token(\"us-east-2\")
         return token
 
-**aiokafka** does not accept a bare function for ``sasl_oauth_token_provider`` — it must
-implement :class:`aiokafka.abc.AbstractTokenProvider` with ``async def token()``.
-:class:`MskIamTokenProvider` wraps :func:`get_msk_auth_token` on a thread pool.
+    producer = AIOKafkaProducer(
+        bootstrap_servers=\"broker:9098\",
+        security_protocol=\"SASL_SSL\",
+        sasl_mechanism=\"OAUTHBEARER\",
+        sasl_oauth_token_provider=oauth_cb,  # <-- NOT valid in aiokafka
+    )
 
-Also, **always** use ``sasl_mechanism="OAUTHBEARER"`` with aiokafka for MSK IAM.
-Some docs show ``AWS_MSK_IAM``; that is **not** a valid aiokafka mechanism name — the broker
-still negotiates **OAUTHBEARER** for IAM.
+**aiokafka** validates ``sasl_oauth_token_provider`` with
+``isinstance(..., AbstractTokenProvider)``. A plain function like ``oauth_cb`` will
+raise at connection time. Use :class:`MskIamTokenProvider` instead — it runs the same
+``MSKAuthTokenProvider.generate_auth_token(region)`` call (sync signer uses the EC2
+instance profile / standard AWS credential chain).
+
+Same wire protocol as your snippet: ``SASL_SSL`` + ``OAUTHBEARER`` on port **9098**.
 """
 
 from __future__ import annotations
@@ -31,8 +38,12 @@ except ImportError:  # pragma: no cover - optional dependency at install time
     MSKAuthTokenProvider = None  # type: ignore[misc, assignment]
 
 
-def get_msk_auth_token(region: str) -> str:
-    """Sync token fetch (same body as common MSK IAM examples)."""
+def msk_oauth_sync(region: str) -> str:
+    """Same logic as a tutorial ``oauth_cb`` body: IAM token string for MSK.
+
+    ``MSKAuthTokenProvider.generate_auth_token`` uses default AWS credentials
+    (instance/task role on EC2/ECS, env, profile, etc.).
+    """
     if MSKAuthTokenProvider is None:
         raise RuntimeError(
             "MSK IAM requested but aws-msk-iam-sasl-signer-python is not installed"
@@ -46,15 +57,11 @@ def default_ssl_context() -> ssl.SSLContext:
 
 
 class MskIamTokenProvider(AbstractTokenProvider):
-    """aiokafka calls ``token()`` for each auth attempt; MSK signer is sync so we offload."""
+    """Wraps :func:`msk_oauth_sync` so aiokafka can call ``await provider.token()``."""
 
     def __init__(self, region: str) -> None:
         self._region = region
 
     async def token(self) -> Optional[str]:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None,
-            get_msk_auth_token,
-            self._region,
-        )
+        return await loop.run_in_executor(None, msk_oauth_sync, self._region)

@@ -1,0 +1,9 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+aiokafka>=0.10.0
+aws-msk-iam-sasl-signer-python>=1.0.0
+pymysql>=1.1.0
+pydantic>=2.6.0
+PyJWT>=2.8.0
+cryptography>=42.0.0
+python-dotenv>=1.0.1
