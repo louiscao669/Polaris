@@ -13,7 +13,7 @@ from .database import create_db_and_tables
 from .settings_app import (
     POLARIS_ENABLE_LEGACY_CONSUMER,
     POLARIS_ENABLE_V2_WORKER,
-    POLARIS_KAFKA_STARTUP_FAIL_OPEN,
+    POLARIS_REQUIRE_KAFKA_AT_STARTUP,
     POLARIS_SKIP_KAFKA_AT_STARTUP,
 )
 from .settings_kafka import KAFKA_BOOTSTRAP_SERVERS, KAFKA_USE_MSK_IAM
@@ -56,14 +56,16 @@ async def lifespan(app: FastAPI):
             await kafka_producer.connect()
             await v2_kafka_producer.connect()
         except Exception as e:
-            if POLARIS_KAFKA_STARTUP_FAIL_OPEN:
-                print(
-                    f"WARNING: Kafka bootstrap failed ({e!r}); continuing boot "
-                    "(set POLARIS_SKIP_KAFKA_AT_STARTUP=1 until network is fixed)",
-                    flush=True,
-                )
-            else:
+            msg = (
+                "Kafka bootstrap failed (HTTP still up). Typical fix: MSK security group "
+                "inbound TCP 9098 from this instance's SG; same VPC/subnet routing; "
+                "KAFKA_USE_MSK_IAM=true for IAM listeners. "
+                "Set POLARIS_REQUIRE_KAFKA_AT_STARTUP=1 to fail fast."
+            )
+            if POLARIS_REQUIRE_KAFKA_AT_STARTUP:
                 raise
+            print(f"WARNING: {e}", flush=True)
+            print(f"WARNING: {msg}", flush=True)
 
     consumer_task: asyncio.Task | None = None
     v2_worker_task: asyncio.Task | None = None

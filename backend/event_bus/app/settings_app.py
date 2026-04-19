@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 
 from dotenv import load_dotenv
+
 load_dotenv()
+
 
 def env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
@@ -20,5 +22,8 @@ POLARIS_ENABLE_V2_WORKER: bool = env_bool("POLARIS_ENABLE_V2_WORKER", False)
 # When true: do not connect Kafka during FastAPI lifespan (health/API up; Kafka writes fail).
 POLARIS_SKIP_KAFKA_AT_STARTUP: bool = env_bool("POLARIS_SKIP_KAFKA_AT_STARTUP", False)
 
-# When true: if Kafka connect fails at boot, log and continue instead of crashing.
-POLARIS_KAFKA_STARTUP_FAIL_OPEN: bool = env_bool("POLARIS_KAFKA_STARTUP_FAIL_OPEN", False)
+# When true: lifespan **raises** if Kafka bootstrap fails (strict).
+# Default false: log the error and continue so HTTP /health works while you fix MSK SG/VPC.
+POLARIS_REQUIRE_KAFKA_AT_STARTUP: bool = env_bool(
+    "POLARIS_REQUIRE_KAFKA_AT_STARTUP", False
+)
