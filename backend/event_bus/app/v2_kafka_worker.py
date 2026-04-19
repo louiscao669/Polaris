@@ -10,12 +10,12 @@ from uuid import UUID
 
 from aiokafka import AIOKafkaConsumer
 
-from backend.app.core.kafka_dispatch import dispatch_v2_consolidated
-from backend.app.kafka_aiokafka_common import aiokafka_common_kwargs
-from backend.app.operations_repo import update_operation_status
-from backend.app.processed_events_repo import classify_message, mark_applied, mark_failed
-from backend.app.topics import dlq_for
-from backend.app.v2_kafka_client import v2_kafka_producer
+from .core.kafka_dispatch import dispatch_v2_consolidated
+from .kafka_aiokafka_common import aiokafka_common_kwargs
+from .operations_repo import update_operation_status
+from .processed_events_repo import classify_message, mark_applied, mark_failed
+from .topics import dlq_for
+from .v2_kafka_client import v2_kafka_producer
 
 
 async def send_to_dlq(

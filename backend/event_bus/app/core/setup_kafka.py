@@ -4,8 +4,8 @@ from typing import Any
 
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 
-from backend.app.msk_oauth import MskIamTokenProvider
-from backend.app.settings_kafka import (
+from ..msk_oauth import MskIamTokenProvider
+from ..settings_kafka import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_MSK_REGION,
     KAFKA_SASL_MECHANISM,

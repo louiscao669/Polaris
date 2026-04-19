@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pymysql.cursors import DictCursor
 
-from backend.app.database import get_connection_reader, get_connection_writer
+from .database import get_connection_reader, get_connection_writer
 
 
 def insert_operation_pending(

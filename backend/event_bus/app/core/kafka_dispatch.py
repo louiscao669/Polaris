@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.app.core.kafka_consumer_sync import (
+from .kafka_consumer_sync import (
     sync_create_e,
     sync_create_m,
     sync_create_o,
@@ -27,14 +27,14 @@ from backend.app.core.kafka_consumer_sync import (
     sync_stats_m_whales,
     sync_user_account_message,
 )
-from backend.app.core.kafka_producer import (
+from .kafka_producer import (
     TOPIC_ORGANIZATION,
     TOPIC_PLATFORM_EVENT,
     TOPIC_PLATFORM_MARKET,
     TOPIC_PLATFORM_MARKET_ANALYTICS,
     TOPIC_PLATFORM_MARKET_FINANCE,
 )
-from backend.app.topics import (
+from ..topics import (
     EVENT_LIFECYCLE,
     MARKET_OPERATIONS,
     ORG_MANAGEMENT,

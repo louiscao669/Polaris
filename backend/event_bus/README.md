@@ -2,9 +2,10 @@ To run this program:
 
 docker-compose up -d
 
-python setup_kafka.py
+PYTHONPATH=. python -m app.core.setup_kafka
 
-uvicorn backend.app.main:app --reload 
+# From this directory (backend/event_bus): put ``app`` on PYTHONPATH
+PYTHONPATH=. uvicorn app.main:app --reload
 
 Then go to http://127.0.0.1:8000/docs, this will lead to the FastAPI page where we can test the different functions in main.py. 
 

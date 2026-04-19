@@ -33,9 +33,10 @@ import pymysql
 from pymysql.cursors import DictCursor
 
 _APP_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _APP_DIR.parents[3]
+# …/backend/event_bus/app → …/backend is parents[1]
+_BACKEND_ROOT = _APP_DIR.parents[1]
 _DEFAULT_DDL = (
-    _REPO_ROOT / "multi_server" / "Database_Visualized" / "mysql_instantiation.txt"
+    _BACKEND_ROOT / "multi_server" / "Database_Visualized" / "mysql_instantiation.txt"
 )
 _LOCAL_DDL = _APP_DIR / "core" / "mysql_instantiation.txt"
 _OPERATIONS_EXT = _APP_DIR / "core" / "mysql_operations_tables.sql"

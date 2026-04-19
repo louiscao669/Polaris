@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from backend.app.topics import (
+from .topics import (
     EVENT_LIFECYCLE,
     MARKET_OPERATIONS,
     ORG_MANAGEMENT,

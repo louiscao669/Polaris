@@ -8,7 +8,7 @@ from typing import Any
 
 import jwt
 
-from backend.app.settings_jwt import (
+from ..settings_jwt import (
     JWT_ISSUER,
     JWT_PUBLIC_KEY_PATH,
     JWT_PUBLIC_KEY_PEM,

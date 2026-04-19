@@ -9,26 +9,26 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 
-from backend.app.auth.jwt_deps import (
+from .auth.jwt_deps import (
     bearer_claims_required_for_operations_read,
     bearer_claims_required_for_writes,
 )
-from backend.app.operations_repo import (
+from .operations_repo import (
     fetch_operation,
     insert_operation_pending,
     update_operation_kafka_meta,
     use_writer_for_operation_fetch,
 )
-from backend.app.schemas.envelope import (
+from .schemas.envelope import (
     build_envelope,
     merge_actor_into_payload,
 )
-from backend.app.settings_jwt import (
+from .settings_jwt import (
     V2_OPERATIONS_REQUIRE_JWT,
     V2_REQUIRE_JWT,
 )
-from backend.app.topics import MARKET_OPERATIONS, ORG_MANAGEMENT, USER_ACCOUNT
-from backend.app.v2_kafka_client import v2_kafka_producer
+from .topics import MARKET_OPERATIONS, ORG_MANAGEMENT, USER_ACCOUNT
+from .v2_kafka_client import v2_kafka_producer
 
 
 router = APIRouter(prefix="/v2", tags=["v2-async"])

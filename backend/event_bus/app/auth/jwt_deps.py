@@ -7,8 +7,8 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from backend.app.auth.jwt_verify import JWTConfigurationError, decode_access_token
-from backend.app.settings_jwt import V2_OPERATIONS_REQUIRE_JWT, V2_REQUIRE_JWT
+from .jwt_verify import JWTConfigurationError, decode_access_token
+from ..settings_jwt import V2_OPERATIONS_REQUIRE_JWT, V2_REQUIRE_JWT
 
 security = HTTPBearer(auto_error=False)
 

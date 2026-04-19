@@ -7,17 +7,17 @@ from typing import Optional
 
 from fastapi import FastAPI
 
-from backend.app.core.kafka_producer import kafka_producer
-from backend.app.core.kafka_server import ENGINE_TOPICS, PolarisEngineNode, NodeState
-from backend.app.database import create_db_and_tables
-from backend.app.settings_app import (
+from .core.kafka_producer import kafka_producer
+from .core.kafka_server import ENGINE_TOPICS, PolarisEngineNode, NodeState
+from .database import create_db_and_tables
+from .settings_app import (
     POLARIS_ENABLE_LEGACY_CONSUMER,
     POLARIS_ENABLE_V2_WORKER,
 )
-from backend.app.settings_worker import worker_topics_and_group
-from backend.app.v2_kafka_client import v2_kafka_producer
-from backend.app.v2_kafka_worker import PolarisV2Worker
-from backend.app.v2_routes import router as v2_router
+from .settings_worker import worker_topics_and_group
+from .v2_kafka_client import v2_kafka_producer
+from .v2_kafka_worker import PolarisV2Worker
+from .v2_routes import router as v2_router
 from dotenv import load_dotenv
 load_dotenv()
 

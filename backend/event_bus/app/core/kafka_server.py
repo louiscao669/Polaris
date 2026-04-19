@@ -4,15 +4,15 @@ from typing import Any, Optional
 
 from aiokafka import AIOKafkaConsumer
 
-from backend.app.core.kafka_dispatch import dispatch_legacy_topic
-from backend.app.core.kafka_producer import (
+from .kafka_dispatch import dispatch_legacy_topic
+from .kafka_producer import (
     TOPIC_ORGANIZATION,
     TOPIC_PLATFORM_EVENT,
     TOPIC_PLATFORM_MARKET,
     TOPIC_PLATFORM_MARKET_ANALYTICS,
     TOPIC_PLATFORM_MARKET_FINANCE,
 )
-from backend.app.kafka_aiokafka_common import aiokafka_common_kwargs
+from ..kafka_aiokafka_common import aiokafka_common_kwargs
 
 SUBSCRIBED_TOPICS = (
     TOPIC_ORGANIZATION,

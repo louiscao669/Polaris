@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.app.database import get_connection
+from ..database import get_connection
 
 
 def _rows(cursor) -> list[list[Any]]:

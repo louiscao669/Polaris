@@ -6,7 +6,7 @@ from typing import Literal
 
 import pymysql.err
 
-from backend.app.database import get_connection
+from .database import get_connection
 
 Outcome = Literal["skip_done", "run"]
 

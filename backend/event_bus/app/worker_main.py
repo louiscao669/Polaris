@@ -6,10 +6,10 @@ import asyncio
 import os
 from dotenv import load_dotenv
 load_dotenv()
-from backend.app.database import create_db_and_tables
-from backend.app.settings_worker import worker_topics_and_group
-from backend.app.v2_kafka_client import v2_kafka_producer
-from backend.app.v2_kafka_worker import PolarisV2Worker
+from .database import create_db_and_tables
+from .settings_worker import worker_topics_and_group
+from .v2_kafka_client import v2_kafka_producer
+from .v2_kafka_worker import PolarisV2Worker
 
 
 async def main() -> None:

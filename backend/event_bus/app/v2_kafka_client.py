@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from aiokafka import AIOKafkaProducer
 
-from backend.app.kafka_aiokafka_common import aiokafka_common_kwargs
+from .kafka_aiokafka_common import aiokafka_common_kwargs
 
 
 class V2KafkaProducer:

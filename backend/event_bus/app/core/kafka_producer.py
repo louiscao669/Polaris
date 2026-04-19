@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from aiokafka import AIOKafkaProducer
 
-from backend.app.kafka_aiokafka_common import aiokafka_common_kwargs
+from ..kafka_aiokafka_common import aiokafka_common_kwargs
 
 # Topics for multi_server domain parity (see multi_server/Backend Functions)
 TOPIC_ORGANIZATION = "organization.lifecycle"
