@@ -1,15 +1,18 @@
 """Shared aiokafka consumer/producer SSL + MSK IAM kwargs.
 
-When ``KAFKA_USE_MSK_IAM`` is true, this matches AWS guidance for Python + aiokafka:
+Equivalent to::
 
-.. code-block:: text
+    token, _ = MSKAuthTokenProvider.generate_auth_token(region)  # see get_msk_auth_token
 
-    security_protocol=SASL_SSL
-    sasl_mechanism=OAUTHBEARER
-    sasl_oauth_token_provider wraps MSKAuthTokenProvider.generate_auth_token(region)
+    AIOKafkaProducer(
+        bootstrap_servers=[...],
+        security_protocol="SASL_SSL",
+        sasl_mechanism="OAUTHBEARER",
+        sasl_oauth_token_provider=MskIamTokenProvider(region),
+        ssl_context=ssl.create_default_context(),
+    )
 
-Do **not** set ``sasl_mechanism`` to ``AWS_MSK_IAM`` here — that is not an aiokafka value.
-IAM auth still uses AWS credentials from the environment/instance/task role.
+``sasl_mechanism`` must be **OAUTHBEARER** for aiokafka + MSK IAM — not ``AWS_MSK_IAM``.
 """
 
 from __future__ import annotations
@@ -21,10 +24,19 @@ from .msk_oauth import MskIamTokenProvider
 from .settings_kafka import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_MSK_REGION,
-    KAFKA_SASL_MECHANISM,
     KAFKA_SECURITY_PROTOCOL,
     KAFKA_USE_MSK_IAM,
 )
+
+
+def _msk_iam_kwargs() -> dict[str, Any]:
+    """Explicit MSK IAM shape for AIOKafkaProducer / AIOKafkaConsumer."""
+    return {
+        "security_protocol": "SASL_SSL",
+        "sasl_mechanism": "OAUTHBEARER",
+        "sasl_oauth_token_provider": MskIamTokenProvider(KAFKA_MSK_REGION),
+        "ssl_context": ssl.create_default_context(),
+    }
 
 
 def aiokafka_common_kwargs() -> dict[str, Any]:
@@ -32,15 +44,7 @@ def aiokafka_common_kwargs() -> dict[str, Any]:
         "bootstrap_servers": KAFKA_BOOTSTRAP_SERVERS,
     }
     if KAFKA_USE_MSK_IAM:
-        kwargs.update(
-            {
-                "security_protocol": KAFKA_SECURITY_PROTOCOL,
-                # OAUTHBEARER + token provider is the Python/aiokafka equivalent of MSK IAM.
-                "sasl_mechanism": KAFKA_SASL_MECHANISM,
-                "sasl_oauth_token_provider": MskIamTokenProvider(KAFKA_MSK_REGION),
-                "ssl_context": ssl.create_default_context(),
-            }
-        )
+        kwargs.update(_msk_iam_kwargs())
     else:
         kwargs["security_protocol"] = KAFKA_SECURITY_PROTOCOL
     return kwargs

@@ -1,21 +1,20 @@
 """Legacy multi-topic Kafka producer.
 
-MSK / IAM is configured in ``kafka_aiokafka_common.aiokafka_common_kwargs()`` when
-``KAFKA_USE_MSK_IAM=true`` — this file only adds serializers and ``enable_idempotence``.
+When ``KAFKA_USE_MSK_IAM=true``, ``connect()`` builds the same initialization as::
 
-Equivalent to AWS IAM auth for Python **aiokafka**:
+    # Sync token (see ``app.msk_oauth.get_msk_auth_token``).
+    # aiokafka requires AbstractTokenProvider; we use ``MskIamTokenProvider``.
+    producer = AIOKafkaProducer(
+        bootstrap_servers=<KAFKA_BOOTSTRAP_SERVERS>,
+        security_protocol=\"SASL_SSL\",
+        sasl_mechanism=\"OAUTHBEARER\",  # not \"AWS_MSK_IAM\" — aiokafka rejects that string
+        sasl_oauth_token_provider=MskIamTokenProvider(<KAFKA_MSK_REGION>),
+        ssl_context=ssl.create_default_context(),
+        ...
+    )
 
-- ``bootstrap_servers`` ← ``KAFKA_BOOTSTRAP_SERVERS`` (e.g. MSK bootstrap on port **9098**)
-- ``security_protocol=SASL_SSL``
-- ``sasl_mechanism=OAUTHBEARER`` (**not** ``AWS_MSK_IAM``, which is Java naming; aiokafka
-  uses **OAUTHBEARER** plus a bearer token provider)
-- ``sasl_oauth_token_provider``: ``MskIamTokenProvider(region)`` →
-  ``MSKAuthTokenProvider.generate_auth_token(region)`` from ``aws-msk-iam-sasl-signer-python``
-
-Also set ``KAFKA_MSK_REGION`` (e.g. ``us-east-2``). AWS credentials come from the instance /
-task IAM role or standard credential chain — not inline in code.
-
-Environment: ``KAFKA_USE_MSK_IAM``, ``KAFKA_MSK_REGION``, ``KAFKA_BOOTSTRAP_SERVERS``.
+This module merges that with ``enable_idempotence`` and ``value_serializer`` via
+``kafka_aiokafka_common.aiokafka_common_kwargs()``.
 """
 
 import json
@@ -63,7 +62,8 @@ class KafkaProducerManager:
         await self._require_producer().send_and_wait(topic, payload, **kwargs)
 
     async def connect(self) -> None:
-        # Shared bootstrap + optional MSK IAM (SASL_SSL / OAUTHBEARER / token provider).
+        # Same kwargs as tutorial MSK IAM producer; token from get_msk_auth_token via
+        # MskIamTokenProvider — see kafka_aiokafka_common / msk_oauth.
         kwargs = aiokafka_common_kwargs()
         kwargs.update(
             {
@@ -72,8 +72,16 @@ class KafkaProducerManager:
             }
         )
 
-        self.producer = AIOKafkaProducer(**kwargs)
-        await self.producer.start()
+        prod = AIOKafkaProducer(**kwargs)
+        try:
+            await prod.start()
+        except BaseException:
+            try:
+                await prod.stop()
+            except Exception:
+                pass
+            raise
+        self.producer = prod
 
     async def disconnect(self) -> None:
         if self.producer is not None:

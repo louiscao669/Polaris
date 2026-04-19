@@ -23,8 +23,16 @@ class V2KafkaProducer:
             }
         )
 
-        self._producer = AIOKafkaProducer(**kwargs)
-        await self._producer.start()
+        prod = AIOKafkaProducer(**kwargs)
+        try:
+            await prod.start()
+        except BaseException:
+            try:
+                await prod.stop()
+            except Exception:
+                pass
+            raise
+        self._producer = prod
 
     async def disconnect(self) -> None:
         if self._producer is not None:

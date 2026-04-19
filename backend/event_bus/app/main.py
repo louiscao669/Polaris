@@ -13,7 +13,10 @@ from .database import create_db_and_tables
 from .settings_app import (
     POLARIS_ENABLE_LEGACY_CONSUMER,
     POLARIS_ENABLE_V2_WORKER,
+    POLARIS_KAFKA_STARTUP_FAIL_OPEN,
+    POLARIS_SKIP_KAFKA_AT_STARTUP,
 )
+from .settings_kafka import KAFKA_BOOTSTRAP_SERVERS, KAFKA_USE_MSK_IAM
 from .settings_worker import worker_topics_and_group
 from .v2_kafka_client import v2_kafka_producer
 from .v2_kafka_worker import PolarisV2Worker
@@ -36,8 +39,31 @@ async def lifespan(app: FastAPI):
     if os.getenv("POLARIS_BOOTSTRAP_DB", "").strip().lower() in {"1", "true", "yes"}:
         create_db_and_tables()
 
-    await kafka_producer.connect()
-    await v2_kafka_producer.connect()
+    print(
+        f"Kafka bootstrap_hosts={len(KAFKA_BOOTSTRAP_SERVERS)} "
+        f"MSK_IAM={KAFKA_USE_MSK_IAM}",
+        flush=True,
+    )
+
+    if POLARIS_SKIP_KAFKA_AT_STARTUP:
+        print(
+            "WARNING: POLARIS_SKIP_KAFKA_AT_STARTUP=1 — skipping Kafka producer connect "
+            "(fix SG/VPC then remove this)",
+            flush=True,
+        )
+    else:
+        try:
+            await kafka_producer.connect()
+            await v2_kafka_producer.connect()
+        except Exception as e:
+            if POLARIS_KAFKA_STARTUP_FAIL_OPEN:
+                print(
+                    f"WARNING: Kafka bootstrap failed ({e!r}); continuing boot "
+                    "(set POLARIS_SKIP_KAFKA_AT_STARTUP=1 until network is fixed)",
+                    flush=True,
+                )
+            else:
+                raise
 
     consumer_task: asyncio.Task | None = None
     v2_worker_task: asyncio.Task | None = None
