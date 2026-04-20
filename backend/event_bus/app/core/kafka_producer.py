@@ -310,14 +310,14 @@ class KafkaProducerManager:
             key=str(market_id).encode(),
         )
 
-    # --- Markets — finance (do_m_transaction uses `type` as price in SQL layer) ---
+    # --- Markets — finance (payload must match Write_Market.do_m_transaction) ---
 
     async def do_m_transaction(
         self,
         user_id: int,
         market_id: int,
         token_id: int,
-        type: int,
+        transaction_type: str,
         side: Any,
         qty: Any,
         transaction_id: int,
@@ -329,7 +329,7 @@ class KafkaProducerManager:
                 "user_id": user_id,
                 "market_id": market_id,
                 "token_id": token_id,
-                "type": type,
+                "transaction_type": transaction_type,
                 "side": side,
                 "qty": qty,
                 "transaction_id": transaction_id,

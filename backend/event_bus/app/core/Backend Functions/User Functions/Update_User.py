@@ -3,7 +3,7 @@ from typing import Any
 import pymysql
 from fail import _fail
 try:
-    from ..database import get_connection
+    from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
 

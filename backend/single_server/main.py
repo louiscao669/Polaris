@@ -16,15 +16,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 _BASE = Path(__file__).resolve().parent
-_BACKEND = _BASE / "Backend Functions"
+# Backend logic lives at repo root: <polaris>/Backend Functions/ (not under single_server).
+_POLARIS_ROOT = _BASE.parents[1]
+_BACKEND_ROOT = _POLARIS_ROOT / "Backend Functions"
 
-for _name in (
-    "Market Functions",
-    "Event Functions",
-    "Organization Functions",
-    "User Functions",
+for _p in (
+    str(_BACKEND_ROOT),
+    str(_BACKEND_ROOT / "Market Functions"),
+    str(_BACKEND_ROOT / "Event Functions"),
+    str(_BACKEND_ROOT / "Organization Functions"),
+    str(_BACKEND_ROOT / "User Functions"),
 ):
-    _p = str(_BACKEND / _name)
     if _p not in sys.path:
         sys.path.insert(0, _p)
 

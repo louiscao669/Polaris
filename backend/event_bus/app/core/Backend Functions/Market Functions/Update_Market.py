@@ -4,7 +4,7 @@ import pymysql, datetime
 from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
 from fail import _fail
 try:
-    from ..database import get_connection
+    from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
 

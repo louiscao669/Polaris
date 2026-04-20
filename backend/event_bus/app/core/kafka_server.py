@@ -22,7 +22,7 @@ ENGINE_TOPICS = SUBSCRIBED_TOPICS
 
 
 class NodeState:
-    """Optional in-process cache; Kafka handlers persist via kafka_consumer_sync."""
+    """Optional in-process cache; persistence uses ``kafka_handlers`` (Backend Functions)."""
 
     def __init__(self):
         self.organizations: dict[int, dict[str, Any]] = {}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .kafka_consumer_sync import (
+from .kafka_handlers import (
     sync_create_e,
     sync_create_m,
     sync_create_o,

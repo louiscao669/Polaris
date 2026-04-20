@@ -3,7 +3,7 @@ from typing import Any
 import pymysql
 from fail import _fail
 try:
-    from ..database import get_connection
+    from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
 
@@ -23,11 +23,34 @@ def create_o(data: dict[str, Any]):
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_o(cursor, db, user_id, name, description)
+        return _create_o(cursor, db, user_id, name, description, data.get("organization_id"))
 
 
-def _create_o(cursor, db, user_id, name, description):
+def _create_o(cursor, db, user_id, name, description, explicit_org_id=None):
     try:
+        if explicit_org_id is not None:
+            oid = int(explicit_org_id)
+            cursor.execute(
+                """
+                INSERT INTO organization (org_id, name, description)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    description = VALUES(description)
+                """,
+                (oid, name, description),
+            )
+            cursor.execute(
+                """
+                INSERT INTO organization_leader (org_id, user_id)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)
+                """,
+                (oid, user_id),
+            )
+            db.commit()
+            return oid
+
         # Check if an organization with the same name already exists
         cursor.execute(
             """
@@ -209,10 +232,26 @@ def create_o_token(data: dict[str, Any]):
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_o_token(cursor, db, user_id, organization_id, token_name, description)
+        return _create_o_token(
+            cursor,
+            db,
+            user_id,
+            organization_id,
+            token_name,
+            description,
+            data.get("token_id"),
+        )
 
 
-def _create_o_token(cursor, db, user_id, organization_id, token_name, description=None):
+def _create_o_token(
+    cursor,
+    db,
+    user_id,
+    organization_id,
+    token_name,
+    description=None,
+    explicit_token_id=None,
+):
     try:
         # Check if user is the organization leader
         cursor.execute(
@@ -243,16 +282,29 @@ def _create_o_token(cursor, db, user_id, organization_id, token_name, descriptio
             return _fail("duplicate", "That token already exists with a different description.")
 
         # Create the token and insert it into the database
-        cursor.execute(
-            """
-            INSERT INTO organization_token (org_id, name, description)
-            VALUES (%s, %s, %s)
-            """,
-            (organization_id, token_name, description),
-        )
+        if explicit_token_id is not None:
+            tid = int(explicit_token_id)
+            cursor.execute(
+                """
+                INSERT INTO organization_token (token_id, org_id, name, description)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    description = VALUES(description)
+                """,
+                (tid, organization_id, token_name, description),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO organization_token (org_id, name, description)
+                VALUES (%s, %s, %s)
+                """,
+                (organization_id, token_name, description),
+            )
         db.commit()
 
-        return cursor.lastrowid
+        return int(explicit_token_id) if explicit_token_id is not None else cursor.lastrowid
 
     except pymysql.err.IntegrityError as e:
         # prevent sql transaction from partially executing and leaving the database in an inconsistent state

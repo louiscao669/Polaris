@@ -3,7 +3,7 @@ from typing import Any
 import pymysql
 from fail import _fail
 try:
-    from ..database import get_connection
+    from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
 
@@ -23,10 +23,17 @@ def create_e(data: dict[str, Any]):
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_e(cursor, db, user_id, organization_id, caption)
+        return _create_e(
+            cursor,
+            db,
+            user_id,
+            organization_id,
+            caption,
+            data.get("event_id"),
+        )
 
 
-def _create_e(cursor, db, user_id, organization_id, caption): 
+def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=None): 
     try:
         # Check if user is the orgnization leader
         cursor.execute(
@@ -39,6 +46,21 @@ def _create_e(cursor, db, user_id, organization_id, caption):
         )
         if cursor.fetchone() is None:
             return _fail("permission", "Only the organization leader can create events.")
+
+        if explicit_event_id is not None:
+            eid = int(explicit_event_id)
+            cursor.execute(
+                """
+                INSERT INTO events (event_id, org_id, caption, is_open)
+                VALUES (%s, %s, %s, TRUE)
+                ON DUPLICATE KEY UPDATE
+                    org_id = VALUES(org_id),
+                    caption = VALUES(caption)
+                """,
+                (eid, organization_id, caption),
+            )
+            db.commit()
+            return eid
 
         # Check if event with the same caption already exists in the organization
         cursor.execute(

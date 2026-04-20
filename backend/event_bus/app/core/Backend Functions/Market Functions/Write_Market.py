@@ -4,7 +4,7 @@ import pymysql, datetime
 from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
 from fail import _fail
 try:
-    from ..database import get_connection
+    from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
 
@@ -28,10 +28,18 @@ def create_m(data: dict[str, Any]):
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_m(cursor, db, user_id, event_id, question, description)
+        return _create_m(
+            cursor,
+            db,
+            user_id,
+            event_id,
+            question,
+            description,
+            data.get("market_id"),
+        )
 
 
-def _create_m(cursor, db, user_id, event_id, question, description): 
+def _create_m(cursor, db, user_id, event_id, question, description, explicit_market_id=None): 
 
     try:
         # Check if user has permission to create market in the event (or is organization leader) and lock the event row
@@ -55,6 +63,21 @@ def _create_m(cursor, db, user_id, event_id, question, description):
         # Check if the event is open
         if event[1] == 0:
             return _fail("not_open", "That event is already closed.")
+
+        if explicit_market_id is not None:
+            mid = int(explicit_market_id)
+            cursor.execute(
+                """
+                INSERT INTO market (id, event_id, question, created_by)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    question = VALUES(question),
+                    event_id = VALUES(event_id)
+                """,
+                (mid, event_id, question, user_id),
+            )
+            db.commit()
+            return mid
         
         # Check if any markets with the same question already exist in the event
         cursor.execute(
@@ -595,7 +618,9 @@ def do_m_transaction(data: dict[str, Any]):
     side = data.get("side")
     qty = data.get("qty")
     transaction_id = data.get("transaction_id")
-    transaction_type = data.get("transaction_type", data.get("type"))
+    transaction_type = data.get("transaction_type")
+    if transaction_type is None and isinstance(data.get("type"), str):
+        transaction_type = data["type"]
 
     if user_id is None:
         return _fail("validation", "do_m_transaction payload is missing required field 'user_id'.")
