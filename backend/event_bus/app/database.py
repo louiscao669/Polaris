@@ -1,14 +1,8 @@
 """MySQL access — Aurora-style leader vs follower routing.
 
-Canonical env (preferred):
-
 - ``LEADER_DB_HOST`` — writer / primary cluster endpoint.
 - ``FOLLOWER_DB_HOST`` — optional comma-separated replica hostnames (or a single host).
 - ``DB_PORT``, ``DB_NAME``, ``DB_USER``, ``DB_PASSWORD`` — shared connection parameters.
-
-Legacy fallbacks (still supported): ``MYSQL_WRITER_HOST``, ``MYSQL_HOST``,
-``MYSQL_READER_HOSTS``, ``MYSQL_READER_HOST``, ``MYSQL_PORT``, ``MYSQL_DATABASE``,
-``MYSQL_USER``, ``MYSQL_PASSWORD``.
 
 If no followers are set, reader connections use the leader host (local dev).
 """

@@ -13,6 +13,7 @@ from .auth.jwt_deps import (
     bearer_claims_required_for_operations_read,
     bearer_claims_required_for_writes,
 )
+
 from .operations_repo import (
     fetch_operation,
     insert_operation_pending,
@@ -27,7 +28,7 @@ from .settings_jwt import (
     V2_OPERATIONS_REQUIRE_JWT,
     V2_REQUIRE_JWT,
 )
-from .topics import MARKET_OPERATIONS, ORG_MANAGEMENT, USER_ACCOUNT
+from .topics import EVENT_LIFECYCLE, MARKET_OPERATIONS, ORG_MANAGEMENT, USER_ACCOUNT
 from .v2_kafka_client import v2_kafka_producer
 
 
@@ -112,6 +113,46 @@ async def v2_org_management(
     )
     insert_operation_pending(
         operation_id=oid, topic=ORG_MANAGEMENT, envelope=envelope_dict
+    )
+    update_operation_kafka_meta(operation_id=oid, partition=part, offset=off)
+
+    out = {
+        "accepted": True,
+        "operation_id": str(oid),
+        "status": "queued",
+        "received_at": env.metadata.timestamp,
+        "estimated_completion": _estimate_completion(),
+    }
+    return Response(
+        content=json.dumps(out),
+        media_type="application/json",
+        status_code=202,
+    )
+
+
+@router.post("/events/lifecycle")
+async def v2_event_lifecycle(
+    payload: dict[str, Any],
+    claims: Annotated[dict[str, Any], Depends(bearer_claims_required_for_writes)],
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> Response:
+    body = _merge_payload(payload, claims, x_user_id)
+    env = build_envelope(
+        domain="event.lifecycle",
+        payload=body,
+        jwt_claims=claims if claims else None,
+    )
+    oid = env.metadata.event_id
+    envelope_dict = env.model_dump(mode="json")
+
+    event_id = body.get("event_id")
+    key = str(event_id).encode("utf-8") if event_id is not None else None
+
+    part, off = await v2_kafka_producer.send_json(
+        topic=EVENT_LIFECYCLE, value=envelope_dict, key=key
+    )
+    insert_operation_pending(
+        operation_id=oid, topic=EVENT_LIFECYCLE, envelope=envelope_dict
     )
     update_operation_kafka_meta(operation_id=oid, partition=part, offset=off)
 

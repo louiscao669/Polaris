@@ -7,13 +7,6 @@ from typing import Any
 from ..database import get_connection
 
 
-def _rows(cursor) -> list[list[Any]]:
-    rows = cursor.fetchall()
-    if not rows:
-        return []
-    return [[*r] if isinstance(r, (list, tuple)) else r for r in rows]
-
-
 def sync_create_o(data: dict[str, Any]) -> None:
     oid = int(data["organization_id"])
     name = data["name"]
@@ -384,108 +377,6 @@ def sync_do_m_payout(data: dict[str, Any]) -> None:
                 (token_id, winner_user_id, shares),
             )
         conn.commit()
-
-
-def _stats_permission(cur, user_id: int, market_id: int) -> bool:
-    cur.execute(
-        """
-        SELECT 1
-        FROM market m
-        JOIN events e ON m.event_id = e.event_id
-        LEFT JOIN organization_leader ol ON e.org_id = ol.org_id AND ol.user_id = %s
-        LEFT JOIN market_open_to_as mota ON m.id = mota.market_id
-        LEFT JOIN user_org_role uor ON mota.org_id = uor.org_id
-            AND mota.role_id = uor.role_id AND uor.user_id = %s
-        WHERE m.id = %s
-          AND (ol.user_id IS NOT NULL OR uor.user_id IS NOT NULL OR m.created_by = %s)
-        """,
-        (user_id, user_id, market_id, user_id),
-    )
-    return cur.fetchone() is not None
-
-
-def sync_stats_m_liquidity(data: dict[str, Any]) -> None:
-    user_id = int(data["user_id"])
-    market_id = int(data["market_id"])
-    with get_connection() as conn:
-        cur = conn.cursor()
-        if not _stats_permission(cur, user_id, market_id):
-            print(f"sync_stats_m_liquidity skipped (permission): user={user_id}")
-            return
-        cur.execute(
-            """
-            SELECT COALESCE(SUM(liquidity), 0)
-            FROM market_price_snapshot
-            WHERE market_id = %s
-            """,
-            (market_id,),
-        )
-        print(f"STATS_LIQUIDITY market={market_id} liquidity={cur.fetchone()[0]}")
-
-
-def sync_stats_m_time_focus(data: dict[str, Any]) -> None:
-    user_id = int(data["user_id"])
-    market_id = int(data["market_id"])
-    with get_connection() as conn:
-        cur = conn.cursor()
-        if not _stats_permission(cur, user_id, market_id):
-            print(f"sync_stats_m_time_focus skipped (permission): user={user_id}")
-            return
-        cur.execute(
-            """
-            SELECT ts, price, liquidity
-            FROM market_price_snapshot
-            WHERE market_id = %s
-            ORDER BY ts DESC
-            LIMIT 10
-            """,
-            (market_id,),
-        )
-        print(f"STATS_TIME_FOCUS market={market_id} rows={_rows(cur)}")
-
-
-def sync_stats_m_whales(data: dict[str, Any]) -> None:
-    user_id = int(data["user_id"])
-    market_id = int(data["market_id"])
-    with get_connection() as conn:
-        cur = conn.cursor()
-        if not _stats_permission(cur, user_id, market_id):
-            print(f"sync_stats_m_whales skipped (permission): user={user_id}")
-            return
-        cur.execute(
-            """
-            SELECT user_id, SUM(shares) AS total_shares
-            FROM user_market_shares
-            WHERE market_id = %s
-            GROUP BY user_id
-            ORDER BY total_shares DESC
-            LIMIT 5
-            """,
-            (market_id,),
-        )
-        print(f"STATS_WHALES market={market_id} rows={_rows(cur)}")
-
-
-def sync_points_m(data: dict[str, Any]) -> None:
-    user_id = int(data["user_id"])
-    market_id = int(data["market_id"])
-    span = int(data["span"])
-    with get_connection() as conn:
-        cur = conn.cursor()
-        if not _stats_permission(cur, user_id, market_id):
-            print(f"sync_points_m skipped (permission): user={user_id}")
-            return
-        cur.execute(
-            """
-            SELECT ts, outcome_id, price, liquidity
-            FROM market_price_snapshot
-            WHERE market_id = %s
-            ORDER BY ts DESC
-            LIMIT %s
-            """,
-            (market_id, span),
-        )
-        print(f"POINTS market={market_id} rows={_rows(cur)}")
 
 
 def sync_user_account_message(data: dict[str, Any]) -> None:

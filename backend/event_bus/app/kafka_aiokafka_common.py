@@ -12,7 +12,6 @@ Equivalent to::
         ssl_context=ssl.create_default_context(),
     )
 
-``sasl_mechanism`` must be **OAUTHBEARER** for aiokafka + MSK IAM — not ``AWS_MSK_IAM``.
 """
 
 from __future__ import annotations

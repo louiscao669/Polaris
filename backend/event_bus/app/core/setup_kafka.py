@@ -36,8 +36,6 @@ async def setup_polaris_topics():
             "organization.lifecycle",
             "platform.event.lifecycle",
             "platform.market.lifecycle",
-            "platform.market.finance",
-            "platform.market.analytics",
             "user.identity.events",
             # v2 consolidated domains (+ DLQs)
             "market.operations",

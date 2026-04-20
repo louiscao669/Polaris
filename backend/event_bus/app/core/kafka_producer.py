@@ -1,17 +1,8 @@
-"""Legacy multi-topic Kafka producer.
-
+"""
 When ``KAFKA_USE_MSK_IAM=true``, ``connect()`` builds the same initialization as::
 
     # Sync token (see ``app.msk_oauth.get_msk_auth_token``).
     # aiokafka requires AbstractTokenProvider; we use ``MskIamTokenProvider``.
-    producer = AIOKafkaProducer(
-        bootstrap_servers=<KAFKA_BOOTSTRAP_SERVERS>,
-        security_protocol=\"SASL_SSL\",
-        sasl_mechanism=\"OAUTHBEARER\",  # not \"AWS_MSK_IAM\" — aiokafka rejects that string
-        sasl_oauth_token_provider=MskIamTokenProvider(<KAFKA_MSK_REGION>),
-        ssl_context=ssl.create_default_context(),
-        ...
-    )
 
 This module merges that with ``enable_idempotence`` and ``value_serializer`` via
 ``kafka_aiokafka_common.aiokafka_common_kwargs()``.
@@ -29,8 +20,6 @@ from ..kafka_aiokafka_common import aiokafka_common_kwargs
 TOPIC_ORGANIZATION = "organization.lifecycle"
 TOPIC_PLATFORM_EVENT = "platform.event.lifecycle"
 TOPIC_PLATFORM_MARKET = "platform.market.lifecycle"
-TOPIC_PLATFORM_MARKET_FINANCE = "platform.market.finance"
-TOPIC_PLATFORM_MARKET_ANALYTICS = "platform.market.analytics"
 TOPIC_USER_IDENTITY = "user.identity.events"
 
 
@@ -334,7 +323,7 @@ class KafkaProducerManager:
         transaction_id: int,
     ) -> None:
         await self._send(
-            TOPIC_PLATFORM_MARKET_FINANCE,
+            TOPIC_PLATFORM_MARKET,
             {
                 "action": "MARKET_TRANSACTION",
                 "user_id": user_id,
@@ -353,7 +342,7 @@ class KafkaProducerManager:
         self, user_id: int, market_id: int, token_id: int
     ) -> None:
         await self._send(
-            TOPIC_PLATFORM_MARKET_FINANCE,
+            TOPIC_PLATFORM_MARKET,
             {
                 "action": "MARKET_PAYOUT",
                 "user_id": user_id,
@@ -363,57 +352,5 @@ class KafkaProducerManager:
             },
             key=str(market_id).encode(),
         )
-
-    # --- Markets — read-side / analytics (market_logic stats & points) ---
-
-    async def stats_m_liquidity(self, user_id: int, market_id: int) -> None:
-        await self._send(
-            TOPIC_PLATFORM_MARKET_ANALYTICS,
-            {
-                "action": "STATS_LIQUIDITY",
-                "user_id": user_id,
-                "market_id": market_id,
-                "timestamp": self._timestamp(),
-            },
-            key=str(market_id).encode(),
-        )
-
-    async def stats_m_time_focus(self, user_id: int, market_id: int) -> None:
-        await self._send(
-            TOPIC_PLATFORM_MARKET_ANALYTICS,
-            {
-                "action": "STATS_TIME_FOCUS",
-                "user_id": user_id,
-                "market_id": market_id,
-                "timestamp": self._timestamp(),
-            },
-            key=str(market_id).encode(),
-        )
-
-    async def stats_m_whales(self, user_id: int, market_id: int) -> None:
-        await self._send(
-            TOPIC_PLATFORM_MARKET_ANALYTICS,
-            {
-                "action": "STATS_WHALES",
-                "user_id": user_id,
-                "market_id": market_id,
-                "timestamp": self._timestamp(),
-            },
-            key=str(market_id).encode(),
-        )
-
-    async def points_m(self, user_id: int, market_id: int, span: Any) -> None:
-        await self._send(
-            TOPIC_PLATFORM_MARKET_ANALYTICS,
-            {
-                "action": "POINTS",
-                "user_id": user_id,
-                "market_id": market_id,
-                "span": span,
-                "timestamp": self._timestamp(),
-            },
-            key=str(market_id).encode(),
-        )
-
 
 kafka_producer = KafkaProducerManager()

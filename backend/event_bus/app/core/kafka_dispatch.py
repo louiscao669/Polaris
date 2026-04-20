@@ -21,18 +21,12 @@ from .kafka_consumer_sync import (
     sync_designate_m_token,
     sync_do_m_payout,
     sync_do_m_transaction,
-    sync_points_m,
-    sync_stats_m_liquidity,
-    sync_stats_m_time_focus,
-    sync_stats_m_whales,
     sync_user_account_message,
 )
 from .kafka_producer import (
     TOPIC_ORGANIZATION,
     TOPIC_PLATFORM_EVENT,
     TOPIC_PLATFORM_MARKET,
-    TOPIC_PLATFORM_MARKET_ANALYTICS,
-    TOPIC_PLATFORM_MARKET_FINANCE,
 )
 from ..topics import (
     EVENT_LIFECYCLE,
@@ -83,28 +77,12 @@ def dispatch_legacy_topic(topic: str, data: dict[str, Any]) -> None:
             sync_designate_m_contraint(data)
         elif action == "DESIGNATE_MARKET_OPEN_TO_AS":
             sync_designate_m_open_to_as(data)
-        else:
-            raise ValueError(f"unknown action for platform.market topic: {action!r}")
-
-    elif topic == TOPIC_PLATFORM_MARKET_FINANCE:
-        if action == "MARKET_TRANSACTION":
+        elif action == "MARKET_TRANSACTION":
             sync_do_m_transaction(data)
         elif action == "MARKET_PAYOUT":
             sync_do_m_payout(data)
         else:
-            raise ValueError(f"unknown action for platform.market.finance topic: {action!r}")
-
-    elif topic == TOPIC_PLATFORM_MARKET_ANALYTICS:
-        if action == "STATS_LIQUIDITY":
-            sync_stats_m_liquidity(data)
-        elif action == "STATS_TIME_FOCUS":
-            sync_stats_m_time_focus(data)
-        elif action == "STATS_WHALES":
-            sync_stats_m_whales(data)
-        elif action == "POINTS":
-            sync_points_m(data)
-        else:
-            raise ValueError(f"unknown action for platform.market.analytics topic: {action!r}")
+            raise ValueError(f"unknown action for platform.market topic: {action!r}")
 
     else:
         raise ValueError(f"unknown legacy topic: {topic!r}")
@@ -120,9 +98,6 @@ _MARKET_LIFECYCLE_ACTIONS = frozenset(
     }
 )
 _MARKET_FINANCE_ACTIONS = frozenset({"MARKET_TRANSACTION", "MARKET_PAYOUT"})
-_MARKET_ANALYTICS_ACTIONS = frozenset(
-    {"STATS_LIQUIDITY", "STATS_TIME_FOCUS", "STATS_WHALES", "POINTS"}
-)
 
 
 def dispatch_v2_consolidated(consolidated_topic: str, payload: dict[str, Any]) -> None:
@@ -141,9 +116,7 @@ def dispatch_v2_consolidated(consolidated_topic: str, payload: dict[str, Any]) -
         if action in _MARKET_LIFECYCLE_ACTIONS:
             dispatch_legacy_topic(TOPIC_PLATFORM_MARKET, payload)
         elif action in _MARKET_FINANCE_ACTIONS:
-            dispatch_legacy_topic(TOPIC_PLATFORM_MARKET_FINANCE, payload)
-        elif action in _MARKET_ANALYTICS_ACTIONS:
-            dispatch_legacy_topic(TOPIC_PLATFORM_MARKET_ANALYTICS, payload)
+            dispatch_legacy_topic(TOPIC_PLATFORM_MARKET, payload)
         else:
             raise ValueError(
                 f"unknown action for market.operations topic: {action!r}"
