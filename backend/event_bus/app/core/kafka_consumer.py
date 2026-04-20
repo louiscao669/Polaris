@@ -7,7 +7,7 @@ from typing import Any
 from ..database import get_connection
 
 
-def sync_create_o(data: dict[str, Any]) -> None:
+def create_o(data: dict[str, Any]) -> None:
     oid = int(data["organization_id"])
     name = data["name"]
     description = data["description"]
@@ -33,7 +33,7 @@ def sync_create_o(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_create_o_role(data: dict[str, Any]) -> None:
+def create_o_role(data: dict[str, Any]) -> None:
     oid = int(data["organization_id"])
     role = data["name"]
     desc = data["desc"]
@@ -50,7 +50,7 @@ def sync_create_o_role(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_create_o_token(data: dict[str, Any]) -> None:
+def create_o_token(data: dict[str, Any]) -> None:
     oid = int(data["organization_id"])
     tid = int(data["token_id"])
     tname = data["token_name"]
@@ -68,7 +68,7 @@ def sync_create_o_token(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_create_e(data: dict[str, Any]) -> None:
+def create_e(data: dict[str, Any]) -> None:
     event_id = int(data["event_id"])
     organization_id = int(data["organization_id"])
     user_id = int(data["user_id"])
@@ -85,7 +85,7 @@ def sync_create_e(data: dict[str, Any]) -> None:
         )
         if cur.fetchone() is None:
             print(
-                f"sync_create_e skipped (permission): user={user_id} org={organization_id}"
+                f"create_e skipped (permission): user={user_id} org={organization_id}"
             )
             return
         cur.execute(
@@ -99,7 +99,7 @@ def sync_create_e(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_designate_e_token(data: dict[str, Any]) -> None:
+def designate_e_token(data: dict[str, Any]) -> None:
     event_id = int(data["event_id"])
     token_id = int(data["token_id"])
     with get_connection() as conn:
@@ -114,7 +114,7 @@ def sync_designate_e_token(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_designate_e_market_creator(data: dict[str, Any]) -> None:
+def designate_e_market_creator(data: dict[str, Any]) -> None:
     event_id = int(data["event_id"])
     user_id = int(data["market_creator_id"])
     with get_connection() as conn:
@@ -129,7 +129,7 @@ def sync_designate_e_market_creator(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_designate_e_contraint(data: dict[str, Any]) -> None:
+def designate_e_contraint(data: dict[str, Any]) -> None:
     event_id = int(data["event_id"])
     constraint_id = int(data["constraint_id"])
     value = int(data["value"])
@@ -146,7 +146,7 @@ def sync_designate_e_contraint(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_designate_e_open_to(data: dict[str, Any]) -> None:
+def designate_e_open_to(data: dict[str, Any]) -> None:
     event_id = int(data["event_id"])
     role_id = str(data["role_id"])
     with get_connection() as conn:
@@ -154,7 +154,7 @@ def sync_designate_e_open_to(data: dict[str, Any]) -> None:
         cur.execute("SELECT org_id FROM events WHERE event_id = %s", (event_id,))
         row = cur.fetchone()
         if row is None:
-            print(f"sync_designate_e_open_to skipped: unknown event_id={event_id}")
+            print(f"designate_e_open_to skipped: unknown event_id={event_id}")
             return
         organization_id = row[0]
         cur.execute(
@@ -168,7 +168,7 @@ def sync_designate_e_open_to(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_designate_e_closed(data: dict[str, Any]) -> None:
+def designate_e_closed(data: dict[str, Any]) -> None:
     event_id = int(data["event_id"])
     with get_connection() as conn:
         cur = conn.cursor()
@@ -179,7 +179,7 @@ def sync_designate_e_closed(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_create_m(data: dict[str, Any]) -> None:
+def create_m(data: dict[str, Any]) -> None:
     market_id = int(data["market_id"])
     event_id = int(data["event_id"])
     user_id = int(data["user_id"])
@@ -197,7 +197,7 @@ def sync_create_m(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_designate_m_token(data: dict[str, Any]) -> None:
+def designate_m_token(data: dict[str, Any]) -> None:
     market_id = int(data["market_id"])
     token_id = int(data["token_id"])
     with get_connection() as conn:
@@ -212,7 +212,7 @@ def sync_designate_m_token(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_designate_m_result(data: dict[str, Any]) -> None:
+def designate_m_result(data: dict[str, Any]) -> None:
     market_id = int(data["market_id"])
     result = data["result"]
     normalized = bool(result) if result not in (0, 1) else bool(int(result))
@@ -235,7 +235,7 @@ def sync_designate_m_result(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_designate_m_contraint(data: dict[str, Any]) -> None:
+def designate_m_contraint(data: dict[str, Any]) -> None:
     market_id = int(data["market_id"])
     constraint_id = int(data["constraint_id"])
     value = int(data["value"])
@@ -252,7 +252,7 @@ def sync_designate_m_contraint(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_designate_m_open_to_as(data: dict[str, Any]) -> None:
+def designate_m_open_to_as(data: dict[str, Any]) -> None:
     market_id = int(data["market_id"])
     role_id = str(data["role_id"])
     as_id = str(data["as_id"])
@@ -269,7 +269,7 @@ def sync_designate_m_open_to_as(data: dict[str, Any]) -> None:
         )
         row = cur.fetchone()
         if row is None:
-            print(f"sync_designate_m_open_to_as skipped: unknown market_id={market_id}")
+            print(f"designate_m_open_to_as skipped: unknown market_id={market_id}")
             return
         organization_id = row[0]
         cur.execute(
@@ -283,7 +283,7 @@ def sync_designate_m_open_to_as(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_do_m_transaction(data: dict[str, Any]) -> None:
+def do_m_transaction(data: dict[str, Any]) -> None:
     user_id = int(data["user_id"])
     market_id = int(data["market_id"])
     token_id = int(data["token_id"])
@@ -338,7 +338,7 @@ def sync_do_m_transaction(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_do_m_payout(data: dict[str, Any]) -> None:
+def do_m_payout(data: dict[str, Any]) -> None:
     user_id = int(data["user_id"])
     market_id = int(data["market_id"])
     token_id = int(data["token_id"])
@@ -355,7 +355,7 @@ def sync_do_m_payout(data: dict[str, Any]) -> None:
         )
         result_row = cur.fetchone()
         if result_row is None:
-            print(f"sync_do_m_payout skipped: market {market_id} not resolved/closed")
+            print(f"do_m_payout skipped: market {market_id} not resolved/closed")
             return
         winning_outcome = result_row[0]
         cur.execute(
@@ -379,7 +379,7 @@ def sync_do_m_payout(data: dict[str, Any]) -> None:
         conn.commit()
 
 
-def sync_user_account_message(data: dict[str, Any]) -> None:
+def user_account_message(data: dict[str, Any]) -> None:
     """Apply user.account domain messages (extend as handlers are added)."""
     action = data.get("action")
     if action == "TEST_PING":
