@@ -20,9 +20,23 @@ body {
     background-color: #2d6cdf;
     color: white;
     padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
 }
 
-.navbar span {
+.navbar-left,
+.navbar-right {
+    display: flex;
+    align-items: center;
+}
+
+.navbar-right {
+    gap: 1rem;
+}
+
+.navbar-brand {
     font-weight: bold;
     margin-right: 15px;
 }
@@ -31,6 +45,10 @@ body {
     color: white;
     text-decoration: none;
     margin-right: 10px;
+}
+
+.navbar-right a {
+    margin-right: 0;
 }
 
 .navbar a:hover {
