@@ -17,7 +17,8 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 
 POLARIS_ENABLE_LEGACY_CONSUMER: bool = env_bool("POLARIS_ENABLE_LEGACY_CONSUMER", True)
-POLARIS_ENABLE_V2_WORKER: bool = env_bool("POLARIS_ENABLE_V2_WORKER", False)
+# Default on so /v2 HTTP writes have a consumer in the common single-process setup.
+POLARIS_ENABLE_V2_WORKER: bool = env_bool("POLARIS_ENABLE_V2_WORKER", True)
 
 # When true: do not connect Kafka during FastAPI lifespan (health/API up; Kafka writes fail).
 POLARIS_SKIP_KAFKA_AT_STARTUP: bool = env_bool("POLARIS_SKIP_KAFKA_AT_STARTUP", False)

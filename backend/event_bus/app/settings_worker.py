@@ -28,6 +28,14 @@ DOMAIN_TOPICS: dict[str, list[str]] = {
     "user": [USER_ACCOUNT],
 }
 
+ALL_V2_TOPICS: list[str] = [
+    MARKET_OPERATIONS,
+    EVENT_LIFECYCLE,
+    ORG_MANAGEMENT,
+    USER_ACCOUNT,
+]
+DEFAULT_ALL_TOPICS_GROUP = "polaris-v2-worker"
+
 
 def worker_topics_and_group() -> tuple[list[str], str]:
     raw_topics = os.getenv("POLARIS_WORKER_TOPICS", "").strip()
@@ -41,16 +49,12 @@ def worker_topics_and_group() -> tuple[list[str], str]:
         if not topics:
             raise ValueError(f"unknown POLARIS_WORKER_DOMAIN={domain!r}")
     else:
-        raise ValueError(
-            "Set POLARIS_WORKER_TOPICS or POLARIS_WORKER_DOMAIN for v2 worker mode"
-        )
+        topics = list(ALL_V2_TOPICS)
 
     if not group:
         if domain:
             group = DOMAIN_DEFAULT_GROUP.get(domain, "")
         if not group:
-            raise ValueError(
-                "Set POLARIS_WORKER_GROUP_ID or use a known POLARIS_WORKER_DOMAIN"
-            )
+            group = DEFAULT_ALL_TOPICS_GROUP
 
     return topics, group
