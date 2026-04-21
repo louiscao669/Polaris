@@ -13,6 +13,7 @@ for _dir in (
     _bf_root / "Organization Functions",
     _bf_root / "Event Functions",
     _bf_root / "Market Functions",
+    _bf_root / "User Functions",
 ):
     s = str(_dir)
     if s not in sys.path:
@@ -39,6 +40,14 @@ _write_event = _load_bf_module(
 _write_market = _load_bf_module(
     "polaris_bf_write_market",
     _bf_root / "Market Functions" / "Write_Market.py",
+)
+_write_user = _load_bf_module(
+    "polaris_bf_write_user",
+    _bf_root / "User Functions" / "Write_User.py",
+)
+_update_user = _load_bf_module(
+    "polaris_bf_update_user",
+    _bf_root / "User Functions" / "Update_User.py",
 )
 
 
@@ -112,8 +121,23 @@ def sync_do_m_payout(data: dict[str, Any]) -> None:
 
 
 def sync_user_account_message(data: dict[str, Any]) -> None:
-    """Apply ``user.account`` payloads (extend when Write_User handlers are wired)."""
+    """Apply user account payloads through the existing User backend functions."""
     action = data.get("action")
+    if action == "USER_SIGNUP":
+        _raise_if_failed(_write_user.user_signup(data))
+        return
+    if action == "USER_LOGIN":
+        _raise_if_failed(_write_user.user_login(data))
+        return
+    if action == "USER_LOGOUT":
+        _raise_if_failed(_write_user.user_logout(data))
+        return
+    if action == "UPDATE_USER_PROFILE":
+        _raise_if_failed(_update_user.update_user_profile(data))
+        return
+    if action == "UPDATE_USER_PASSWORD":
+        _raise_if_failed(_update_user.update_user_password(data))
+        return
     if action == "TEST_PING":
         return
     raise ValueError(f"unsupported user.account action: {action!r}")

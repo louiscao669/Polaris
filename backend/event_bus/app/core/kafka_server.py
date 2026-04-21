@@ -9,6 +9,7 @@ from .kafka_producer import (
     TOPIC_ORGANIZATION,
     TOPIC_PLATFORM_EVENT,
     TOPIC_PLATFORM_MARKET,
+    TOPIC_USER_IDENTITY,
 )
 from ..kafka_aiokafka_common import aiokafka_common_kwargs
 
@@ -16,6 +17,7 @@ SUBSCRIBED_TOPICS = (
     TOPIC_ORGANIZATION,
     TOPIC_PLATFORM_EVENT,
     TOPIC_PLATFORM_MARKET,
+    TOPIC_USER_IDENTITY,
 )
 
 ENGINE_TOPICS = SUBSCRIBED_TOPICS

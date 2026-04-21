@@ -27,6 +27,7 @@ from .kafka_producer import (
     TOPIC_ORGANIZATION,
     TOPIC_PLATFORM_EVENT,
     TOPIC_PLATFORM_MARKET,
+    TOPIC_USER_IDENTITY,
 )
 from ..topics import (
     EVENT_LIFECYCLE,
@@ -83,6 +84,9 @@ def dispatch_legacy_topic(topic: str, data: dict[str, Any]) -> None:
             sync_do_m_payout(data)
         else:
             raise ValueError(f"unknown action for platform.market topic: {action!r}")
+
+    elif topic == TOPIC_USER_IDENTITY:
+        sync_user_account_message(data)
 
     else:
         raise ValueError(f"unknown legacy topic: {topic!r}")
