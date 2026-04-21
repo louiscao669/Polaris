@@ -13,11 +13,9 @@ def _strip_env(name: str) -> str:
 # Canonical names first, then legacy single-host MYSQL_* fallback.
 LEADER_DB_HOST = (
     _strip_env("LEADER_DB_HOST")
-    or _strip_env("MYSQL_WRITER_HOST")
-    or _strip_env("MYSQL_HOST")
-    or "127.0.0.1"
+    or "polaris-balancer-1818197353.us-east-2.elb.amazonaws.com"
 )
-FOLLOWER_DB_HOST_RAW = _strip_env("FOLLOWER_DB_HOST") or _strip_env("MYSQL_READER_HOSTS")
+FOLLOWER_DB_HOST_RAW = _strip_env("FOLLOWER_DB_HOST")
 if FOLLOWER_DB_HOST_RAW:
     FOLLOWER_DB_HOSTS = [h.strip() for h in FOLLOWER_DB_HOST_RAW.split(",") if h.strip()]
 else:

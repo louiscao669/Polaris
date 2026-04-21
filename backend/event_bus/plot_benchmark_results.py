@@ -67,11 +67,9 @@ def load_rows(csv_path: Path) -> list[dict[str, float]]:
 
 def plot_throughput(rows: list[dict[str, float]], out_path: Path) -> None:
     users = [r["users"] for r in rows]
-    submit_rps = [r["submit_rps"] for r in rows]
     completion_ops_s = [r["completion_ops_s"] for r in rows]
 
     plt.figure(figsize=(9, 5))
-    plt.plot(users, submit_rps, marker="o", label="Submit throughput (req/s)")
     plt.plot(users, completion_ops_s, marker="o", label="Completion throughput (ops/s)")
     plt.xlabel("Concurrent users")
     plt.ylabel("Ops per second")
