@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import os
@@ -97,6 +98,7 @@ def submit_transaction(
     payload = {
         "user_id": args.user_id,
         "market_id": args.market_id,
+        "action": "MARKET_TRANSACTION",
         "token_id": args.token_id,
         "side": args.side,
         "qty": args.qty,
@@ -227,13 +229,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run throughput + latency tests for market betting via the event bus."
     )
-    parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    parser.add_argument("--base-url", default="polaris-balancer-1818197353.us-east-2.elb.amazonaws.com")
     parser.add_argument("--user-id", type=int, required=True)
     parser.add_argument("--market-id", type=int, required=True)
     parser.add_argument("--token-id", type=int, required=True)
-    parser.add_argument("--requests", type=int, default=100)
+    parser.add_argument("--requests", type=int, default=2000)
     parser.add_argument("--concurrency", type=int, default=10)
-    parser.add_argument("--qty", type=float, default=1.0)
+    parser.add_argument("--qty", type=int, default=1.0)
     parser.add_argument("--side", type=int, choices=(0, 1), default=1)
     parser.add_argument(
         "--transaction-type",
@@ -245,35 +247,46 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=int(time.time() * 1000),
     )
-    parser.add_argument("--poll-interval", type=float, default=0.25)
+    parser.add_argument("--poll-interval", type=float, default=0.1)
     parser.add_argument("--poll-timeout", type=float, default=30.0)
     parser.add_argument("--request-timeout", type=float, default=30.0)
     parser.add_argument("--jwt", default=os.getenv("BENCHMARK_JWT"))
     parser.add_argument("--x-user-id", type=int, default=None)
+    parser.add_argument(
+        "--concurrency-sweep",
+        default="",
+        help=(
+            "Comma-separated concurrency values to run back-to-back, "
+            'e.g. "10,20,30,40,50,60,70,80,90,100".'
+        ),
+    )
+    parser.add_argument(
+        "--out-csv",
+        default="",
+        help="Optional output CSV path for sweep results.",
+    )
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    headers = build_headers(args)
-
-    print("Starting market betting benchmark")
-    print(
-        json.dumps(
-            {
-                "base_url": args.base_url,
-                "user_id": args.user_id,
-                "market_id": args.market_id,
-                "token_id": args.token_id,
-                "requests": args.requests,
-                "concurrency": args.concurrency,
-                "qty": args.qty,
-                "side": args.side,
-                "transaction_type": args.transaction_type,
-            },
-            indent=2,
+def run_once(args: argparse.Namespace, headers: dict[str, str], *, verbose: bool) -> tuple[int, int, float, float]:
+    if verbose:
+        print("Starting market betting benchmark")
+        print(
+            json.dumps(
+                {
+                    "base_url": args.base_url,
+                    "user_id": args.user_id,
+                    "market_id": args.market_id,
+                    "token_id": args.token_id,
+                    "requests": args.requests,
+                    "concurrency": args.concurrency,
+                    "qty": args.qty,
+                    "side": args.side,
+                    "transaction_type": args.transaction_type,
+                },
+                indent=2,
+            )
         )
-    )
 
     accepted_ops: list[AcceptedOperation] = []
     submit_started = time.perf_counter()
@@ -303,11 +316,101 @@ def main() -> int:
             completed_ops.append(future.result())
     total_seconds = time.perf_counter() - submit_started
 
-    print_summary(accepted_ops, completed_ops, submit_seconds, total_seconds)
-    print(f"\npoll_phase_seconds: {time.perf_counter() - poll_started:.3f}")
+    if verbose:
+        print_summary(accepted_ops, completed_ops, submit_seconds, total_seconds)
+        print(f"\npoll_phase_seconds: {time.perf_counter() - poll_started:.3f}")
 
-    failed = [op for op in completed_ops if op.final_status != "succeeded"]
-    return 1 if failed else 0
+    succeeded = sum(1 for op in completed_ops if op.final_status == "succeeded")
+    failed = len(completed_ops) - succeeded
+    return succeeded, failed, submit_seconds, total_seconds
+
+
+def parse_concurrency_sweep(raw: str) -> list[int]:
+    if not raw.strip():
+        return []
+    values: list[int] = []
+    for part in raw.split(","):
+        p = part.strip()
+        if not p:
+            continue
+        v = int(p)
+        if v <= 0:
+            raise ValueError("concurrency sweep values must be > 0")
+        values.append(v)
+    return values
+
+
+def write_sweep_csv(path: str, rows: list[dict[str, float | int]]) -> None:
+    fieldnames = [
+        "users",
+        "succeeded",
+        "failed",
+        "submit_rps",
+        "completion_ops_s",
+        "submit_s",
+        "total_s",
+    ]
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+def main() -> int:
+    args = parse_args()
+    headers = build_headers(args)
+    sweep_values = parse_concurrency_sweep(args.concurrency_sweep)
+    if not sweep_values:
+        succeeded, failed, _submit_seconds, _total_seconds = run_once(
+            args, headers, verbose=True
+        )
+        return 1 if failed else 0
+
+    print("Starting market betting benchmark sweep")
+    print(f"concurrency_values: {sweep_values}")
+    print(f"requests_per_run: {args.requests}")
+    print()
+    print(
+        "users  succeeded  failed  submit_rps  completion_ops_s  "
+        "submit_s  total_s"
+    )
+    print("-" * 78)
+    any_failed = False
+    csv_rows: list[dict[str, float | int]] = []
+    for i, users in enumerate(sweep_values):
+        run_args = argparse.Namespace(**vars(args))
+        run_args.concurrency = users
+        # keep transaction_id unique across sweep runs
+        run_args.transaction_id_start = args.transaction_id_start + (i * args.requests)
+        succeeded, failed, submit_seconds, total_seconds = run_once(
+            run_args, headers, verbose=False
+        )
+        submit_rps = (args.requests / submit_seconds) if submit_seconds > 0 else 0.0
+        completion_ops_s = (
+            (args.requests / total_seconds) if total_seconds > 0 else 0.0
+        )
+        print(
+            f"{users:>5}  {succeeded:>9}  {failed:>6}  "
+            f"{submit_rps:>10.2f}  {completion_ops_s:>16.2f}  "
+            f"{submit_seconds:>8.3f}  {total_seconds:>7.3f}"
+        )
+        csv_rows.append(
+            {
+                "users": users,
+                "succeeded": succeeded,
+                "failed": failed,
+                "submit_rps": round(submit_rps, 4),
+                "completion_ops_s": round(completion_ops_s, 4),
+                "submit_s": round(submit_seconds, 4),
+                "total_s": round(total_seconds, 4),
+            }
+        )
+        any_failed = any_failed or (failed > 0)
+    if args.out_csv.strip():
+        write_sweep_csv(args.out_csv, csv_rows)
+        print(f"\nWrote CSV: {args.out_csv}")
+    return 1 if any_failed else 0
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ from typing import Any
 import mysql.connector
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from database import get_db
+from database import get_db_reader, get_db_writer
 
 from event_logic import (
     create_e,
@@ -117,14 +117,14 @@ class OrgTokenCreateBody(BaseModel):
 
 
 @router.post("/organizations")
-def http_create_organization(body: OrgCreateBody, conn=Depends(get_db)):
+def http_create_organization(body: OrgCreateBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(conn, create_o, body.user_id, body.name, body.description)
     )
 
 
 @router.post("/organization-roles")
-def http_create_organization_role(body: OrgRoleCreateBody, conn=Depends(get_db)):
+def http_create_organization_role(body: OrgRoleCreateBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(
             conn, create_o_role, body.user_id, body.organization_id, body.name, body.desc
@@ -133,7 +133,7 @@ def http_create_organization_role(body: OrgRoleCreateBody, conn=Depends(get_db))
 
 
 @router.post("/organization-tokens")
-def http_create_organization_token(body: OrgTokenCreateBody, conn=Depends(get_db)):
+def http_create_organization_token(body: OrgTokenCreateBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(
             conn,
@@ -186,21 +186,21 @@ class EventCloseBody(BaseModel):
 
 
 @router.post("/events")
-def http_create_event(body: EventCreateBody, conn=Depends(get_db)):
+def http_create_event(body: EventCreateBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(conn, create_e, body.user_id, body.organization_id, body.caption)
     )
 
 
 @router.post("/events/designate-token")
-def http_designate_event_token(body: EventTokenBody, conn=Depends(get_db)):
+def http_designate_event_token(body: EventTokenBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(conn, designate_e_token, body.user_id, body.event_id, body.token_id)
     )
 
 
 @router.post("/events/designate-market-creator")
-def http_designate_event_market_creator(body: EventMarketCreatorBody, conn=Depends(get_db)):
+def http_designate_event_market_creator(body: EventMarketCreatorBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(
             conn,
@@ -213,7 +213,7 @@ def http_designate_event_market_creator(body: EventMarketCreatorBody, conn=Depen
 
 
 @router.post("/events/designate-constraint")
-def http_designate_event_constraint(body: EventConstraintBody, conn=Depends(get_db)):
+def http_designate_event_constraint(body: EventConstraintBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(
             conn,
@@ -227,7 +227,7 @@ def http_designate_event_constraint(body: EventConstraintBody, conn=Depends(get_
 
 
 @router.post("/events/designate-open-to")
-def http_designate_event_open_to(body: EventOpenToBody, conn=Depends(get_db)):
+def http_designate_event_open_to(body: EventOpenToBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(
             conn, designate_e_open_to, body.user_id, body.event_id, body.role_id
@@ -236,7 +236,7 @@ def http_designate_event_open_to(body: EventOpenToBody, conn=Depends(get_db)):
 
 
 @router.post("/events/close")
-def http_designate_event_closed(body: EventCloseBody, conn=Depends(get_db)):
+def http_designate_event_closed(body: EventCloseBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(conn, designate_e_closed, body.user_id, body.event_id)
     )
@@ -295,28 +295,28 @@ class MarketPayoutBody(BaseModel):
 
 
 @router.post("/markets")
-def http_create_market(body: MarketCreateBody, conn=Depends(get_db)):
+def http_create_market(body: MarketCreateBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(conn, create_m, body.user_id, body.event_id, body.question, body.description)
     )
 
 
 @router.post("/markets/designate-token")
-def http_designate_market_token(body: MarketTokenBody, conn=Depends(get_db)):
+def http_designate_market_token(body: MarketTokenBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(conn, designate_m_token, body.user_id, body.market_id, body.token_id)
     )
 
 
 @router.post("/markets/designate-result")
-def http_designate_market_result(body: MarketResultBody, conn=Depends(get_db)):
+def http_designate_market_result(body: MarketResultBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(conn, designate_m_result, body.user_id, body.market_id, body.result)
     )
 
 
 @router.post("/markets/designate-constraint")
-def http_designate_market_constraint(body: MarketConstraintBody, conn=Depends(get_db)):
+def http_designate_market_constraint(body: MarketConstraintBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(
             conn,
@@ -330,7 +330,7 @@ def http_designate_market_constraint(body: MarketConstraintBody, conn=Depends(ge
 
 
 @router.post("/markets/designate-open-to-as")
-def http_designate_market_open_to_as(body: MarketOpenToAsBody, conn=Depends(get_db)):
+def http_designate_market_open_to_as(body: MarketOpenToAsBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(
             conn,
@@ -344,7 +344,7 @@ def http_designate_market_open_to_as(body: MarketOpenToAsBody, conn=Depends(get_
 
 
 @router.post("/markets/transactions")
-def http_market_transaction(body: MarketTransactionBody, conn=Depends(get_db)):
+def http_market_transaction(body: MarketTransactionBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(
             conn,
@@ -361,7 +361,7 @@ def http_market_transaction(body: MarketTransactionBody, conn=Depends(get_db)):
 
 
 @router.post("/markets/payout")
-def http_market_payout(body: MarketPayoutBody, conn=Depends(get_db)):
+def http_market_payout(body: MarketPayoutBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(conn, do_m_payout, body.user_id, body.market_id, body.token_id)
     )
@@ -371,7 +371,7 @@ def http_market_payout(body: MarketPayoutBody, conn=Depends(get_db)):
 def http_stats_liquidity(
     user_id: int = Query(...),
     market_id: int = Query(...),
-    conn=Depends(get_db),
+    conn=Depends(get_db_reader),
 ):
     return _unwrap_result(_call_db(conn, stats_m_liquidity, user_id, market_id))
 
@@ -380,7 +380,7 @@ def http_stats_liquidity(
 def http_stats_time_focus(
     user_id: int = Query(...),
     market_id: int = Query(...),
-    conn=Depends(get_db),
+    conn=Depends(get_db_reader),
 ):
     return _unwrap_result(_call_db(conn, stats_m_time_focus, user_id, market_id))
 
@@ -389,7 +389,7 @@ def http_stats_time_focus(
 def http_stats_whales(
     user_id: int = Query(...),
     market_id: int = Query(...),
-    conn=Depends(get_db),
+    conn=Depends(get_db_reader),
 ):
     return _unwrap_result(_call_db(conn, stats_m_whales, user_id, market_id))
 
@@ -398,7 +398,7 @@ def http_stats_whales(
 def http_stats_trade_distribution(
     user_id: int = Query(...),
     market_id: int = Query(...),
-    conn=Depends(get_db),
+    conn=Depends(get_db_reader),
 ):
     return _unwrap_result(_call_db(conn, stats_m_trade_distribution, user_id, market_id))
 
@@ -408,7 +408,7 @@ def http_stats_window_comparison(
     user_id: int = Query(...),
     market_id: int = Query(...),
     hours: int = Query(24, ge=1),
-    conn=Depends(get_db),
+    conn=Depends(get_db_reader),
 ):
     return _unwrap_result(_call_db(conn, stats_m_window_comparison, user_id, market_id, hours))
 
@@ -418,7 +418,7 @@ def http_market_points(
     user_id: int = Query(...),
     market_id: int = Query(...),
     span: int = Query(..., ge=1),
-    conn=Depends(get_db),
+    conn=Depends(get_db_reader),
 ):
     return _unwrap_result(_call_db(conn, points_m, user_id, market_id, span))
 
@@ -450,12 +450,12 @@ class TradingOrderBody(BaseModel):
 
 
 @router.get("/dashboard/users/{user_id}/organizations")
-def http_dashboard_user_organizations(user_id: int, conn=Depends(get_db)):
+def http_dashboard_user_organizations(user_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, list_user_organizations, user_id)
 
 
 @router.get("/organizations/{org_id}")
-def http_get_organization(org_id: int, conn=Depends(get_db)):
+def http_get_organization(org_id: int, conn=Depends(get_db_reader)):
     out = _call_db(conn, get_organization, org_id)
     if out is None:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -463,12 +463,12 @@ def http_get_organization(org_id: int, conn=Depends(get_db)):
 
 
 @router.get("/organizations/{org_id}/events")
-def http_get_organization_events(org_id: int, conn=Depends(get_db)):
+def http_get_organization_events(org_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, list_organization_events, org_id)
 
 
 @router.get("/events/{event_id}")
-def http_get_event(event_id: int, conn=Depends(get_db)):
+def http_get_event(event_id: int, conn=Depends(get_db_reader)):
     out = _call_db(conn, get_event, event_id)
     if out is None:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -476,7 +476,7 @@ def http_get_event(event_id: int, conn=Depends(get_db)):
 
 
 @router.get("/dashboard/organizations/{org_id}/events")
-def http_dashboard_org_events(org_id: int, user_id: int = Query(..., description="Current user id"), conn=Depends(get_db)):
+def http_dashboard_org_events(org_id: int, user_id: int = Query(..., description="Current user id"), conn=Depends(get_db_reader)):
     cur = conn.cursor(buffered=True)
     try:
         if not user_belongs_to_org(cur, conn, org_id, user_id):
@@ -488,32 +488,32 @@ def http_dashboard_org_events(org_id: int, user_id: int = Query(..., description
         cur.close()
 
 @router.get("/dashboard/organizations/{org_id}/num-participants")
-def http_dashboard_org_num_participants(org_id: int, conn=Depends(get_db)):
+def http_dashboard_org_num_participants(org_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, get_num_participants, org_id)
 
 @router.get("/dashboard/organizations/{org_id}/num-events")
-def http_dashboard_org_num_events(org_id: int, conn=Depends(get_db)):
+def http_dashboard_org_num_events(org_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, get_num_events, org_id)
 
 @router.get("/dashboard/events/{event_id}/num-markets")
-def http_dashboard_org_num_markets(event_id: int, conn=Depends(get_db)):
+def http_dashboard_org_num_markets(event_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, get_num_open_markets, event_id)
 
 @router.get("/dashboard/organizations/{org_id}/tokens-allowed")
-def http_dashboard_org_tokens_allowed(org_id: int, conn=Depends(get_db)):
+def http_dashboard_org_tokens_allowed(org_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, get_tokens_allowed_org, org_id)
 
 
 @router.get("/dashboard/markets/{market_id}/tokens-allowed")
-def http_dashboard_market_tokens_allowed(market_id: int, conn=Depends(get_db)):
+def http_dashboard_market_tokens_allowed(market_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, get_tokens_allowed_market, market_id)
 
 @router.get("/dashboard/organizations/{org_id}/{token_id}/token-name")
-def http_dashboard_org_tokens_name(org_id: int, token_id: int, conn=Depends(get_db)):
+def http_dashboard_org_tokens_name(org_id: int, token_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, get_token_name, org_id, token_id)
 
 @router.get("/dashboard/organizations/{org_id}/{token_id}/token-description")
-def http_dashboard_org_tokens_description(org_id: int, token_id: int, conn=Depends(get_db)):
+def http_dashboard_org_tokens_description(org_id: int, token_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, get_token_description, org_id, token_id)
 
 @router.get("/dashboard/organizations/{org_id}/{token_id}/token-quantity")
@@ -521,13 +521,13 @@ def http_dashboard_org_tokens_quantity(
     org_id: int,
     token_id: int,
     user_id: int | None = Query(None, description="Optional user id for user-specific quantity"),
-    conn=Depends(get_db),
+    conn=Depends(get_db_reader),
 ):
     return _call_db(conn, get_tokens_quantity, token_id, org_id, user_id)
 
 
 @router.get("/dashboard/organizations/{org_id}/total-volume")
-def http_dashboard_org_total_volume(org_id: int, conn=Depends(get_db)):
+def http_dashboard_org_total_volume(org_id: int, conn=Depends(get_db_reader)):
     return _call_db(conn, get_total_volume_org, org_id)
 
 
@@ -552,14 +552,14 @@ class LogoutBody(BaseModel):
 
 
 @router.post("/auth/login")
-def http_login(body: LoginBody, conn=Depends(get_db)):
+def http_login(body: LoginBody, conn=Depends(get_db_writer)):
     return _unwrap_result(
         _call_db(conn, user_login, (body.email or "").strip(), body.password)
     )
 
 
 @router.post("/auth/signup")
-def http_signup(body: SignupBody, conn=Depends(get_db)):
+def http_signup(body: SignupBody, conn=Depends(get_db_writer)):
     raw = _call_db(
         conn,
         user_signup,
@@ -578,5 +578,5 @@ def http_signup(body: SignupBody, conn=Depends(get_db)):
 
 
 @router.post("/auth/logout")
-def http_logout(body: LogoutBody, conn=Depends(get_db)):
+def http_logout(body: LogoutBody, conn=Depends(get_db_writer)):
     return _unwrap_result(_call_db(conn, user_logout, body.session_token))
