@@ -1,6 +1,6 @@
 -- organization objects
 
-CREATE TABLE IF NOT EXISTS `organization` (
+CREATE TABLE IF NOT EXISTS `DESCRIBE organization;DB` (
     `org_id` int auto_increment primary key,
     `name` varchar(255) not null,
     `description` text
