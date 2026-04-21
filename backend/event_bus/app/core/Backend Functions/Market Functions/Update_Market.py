@@ -2,7 +2,7 @@ from typing import Any
 
 import pymysql, datetime
 from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -14,14 +14,20 @@ def update_m(data: dict[str, Any]):
     question = data.get("question")
 
     if user_id is None:
-        return _fail("validation", "update_m payload is missing required field 'user_id'.")
+        result = _fail("validation", "update_m payload is missing required field 'user_id'.")
+        _log_result("update_m", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "update_m payload is missing required field 'market_id'.")
+        result = _fail("validation", "update_m payload is missing required field 'market_id'.")
+        _log_result("update_m", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _update_m(cursor, db, user_id, market_id, question)
+        result = _update_m(cursor, db, user_id, market_id, question)
+    _log_result("update_m", result)
+    return result
 
 
 def _update_m(cursor, db, user_id, market_id, question=None):

@@ -2,7 +2,7 @@ from typing import Any
 
 import pymysql, datetime
 from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -15,28 +15,30 @@ def create_m(data: dict[str, Any]):
     description = data.get("description")
 
     if user_id is None:
-        return _fail("validation", "create_m payload is missing required field 'user_id'.")
+        result = _fail("validation", "create_m payload is missing required field 'user_id'.")
+        _log_result("create_m", result)
+        return result
 
     if event_id is None:
-        return _fail("validation", "create_m payload is missing required field 'event_id'.")
+        result = _fail("validation", "create_m payload is missing required field 'event_id'.")
+        _log_result("create_m", result)
+        return result
 
     if question is None:
-        return _fail("validation", "create_m payload is missing required field 'question'.")
+        result = _fail("validation", "create_m payload is missing required field 'question'.")
+        _log_result("create_m", result)
+        return result
 
     if description is None:
-        return _fail("validation", "create_m payload is missing required field 'description'.")
+        result = _fail("validation", "create_m payload is missing required field 'description'.")
+        _log_result("create_m", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_m(
-            cursor,
-            db,
-            user_id,
-            event_id,
-            question,
-            description,
-            data.get("market_id"),
-        )
+        result = _create_m(cursor, db, user_id, event_id, question, description)
+    _log_result("create_m", result)
+    return result
 
 
 def _create_m(cursor, db, user_id, event_id, question, description, explicit_market_id=None): 
@@ -120,17 +122,25 @@ def designate_m_token(data: dict[str, Any]):
     token_id = data.get("token_id")
 
     if user_id is None:
-        return _fail("validation", "designate_m_token payload is missing required field 'user_id'.")
+        result = _fail("validation", "designate_m_token payload is missing required field 'user_id'.")
+        _log_result("designate_m_token", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "designate_m_token payload is missing required field 'market_id'.")
+        result = _fail("validation", "designate_m_token payload is missing required field 'market_id'.")
+        _log_result("designate_m_token", result)
+        return result
 
     if token_id is None:
-        return _fail("validation", "designate_m_token payload is missing required field 'token_id'.")
+        result = _fail("validation", "designate_m_token payload is missing required field 'token_id'.")
+        _log_result("designate_m_token", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _designate_m_token(cursor, db, user_id, market_id, token_id)
+        result = _designate_m_token(cursor, db, user_id, market_id, token_id)
+    _log_result("designate_m_token", result)
+    return result
 
 
 def _designate_m_token(cursor, db, user_id, market_id, token_id): 
@@ -231,17 +241,25 @@ def designate_m_result(data: dict[str, Any]):
     result = data.get("result")
 
     if user_id is None:
-        return _fail("validation", "designate_m_result payload is missing required field 'user_id'.")
+        outcome = _fail("validation", "designate_m_result payload is missing required field 'user_id'.")
+        _log_result("designate_m_result", outcome)
+        return outcome
 
     if market_id is None:
-        return _fail("validation", "designate_m_result payload is missing required field 'market_id'.")
+        outcome = _fail("validation", "designate_m_result payload is missing required field 'market_id'.")
+        _log_result("designate_m_result", outcome)
+        return outcome
 
     if result is None:
-        return _fail("validation", "designate_m_result payload is missing required field 'result'.")
+        outcome = _fail("validation", "designate_m_result payload is missing required field 'result'.")
+        _log_result("designate_m_result", outcome)
+        return outcome
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _designate_m_result(cursor, db, user_id, market_id, result)
+        outcome = _designate_m_result(cursor, db, user_id, market_id, result)
+    _log_result("designate_m_result", outcome)
+    return outcome
 
 
 def _designate_m_result(cursor, db, user_id, market_id, result): 
@@ -369,20 +387,30 @@ def designate_m_contraint(data: dict[str, Any]):
     value = data.get("value")
 
     if user_id is None:
-        return _fail("validation", "designate_m_contraint payload is missing required field 'user_id'.")
+        result = _fail("validation", "designate_m_contraint payload is missing required field 'user_id'.")
+        _log_result("designate_m_contraint", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "designate_m_contraint payload is missing required field 'market_id'.")
+        result = _fail("validation", "designate_m_contraint payload is missing required field 'market_id'.")
+        _log_result("designate_m_contraint", result)
+        return result
 
     if constraint_id is None:
-        return _fail("validation", "designate_m_contraint payload is missing required field 'constraint_id'.")
+        result = _fail("validation", "designate_m_contraint payload is missing required field 'constraint_id'.")
+        _log_result("designate_m_contraint", result)
+        return result
 
     if value is None:
-        return _fail("validation", "designate_m_contraint payload is missing required field 'value'.")
+        result = _fail("validation", "designate_m_contraint payload is missing required field 'value'.")
+        _log_result("designate_m_contraint", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value)
+        result = _designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value)
+    _log_result("designate_m_contraint", result)
+    return result
 
 
 def _designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value):
@@ -485,20 +513,30 @@ def designate_m_open_to_as(data: dict[str, Any]):
     as_id = data.get("as_id")
 
     if user_id is None:
-        return _fail("validation", "designate_m_open_to_as payload is missing required field 'user_id'.")
+        result = _fail("validation", "designate_m_open_to_as payload is missing required field 'user_id'.")
+        _log_result("designate_m_open_to_as", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "designate_m_open_to_as payload is missing required field 'market_id'.")
+        result = _fail("validation", "designate_m_open_to_as payload is missing required field 'market_id'.")
+        _log_result("designate_m_open_to_as", result)
+        return result
 
     if role_id is None:
-        return _fail("validation", "designate_m_open_to_as payload is missing required field 'role_id'.")
+        result = _fail("validation", "designate_m_open_to_as payload is missing required field 'role_id'.")
+        _log_result("designate_m_open_to_as", result)
+        return result
 
     if as_id is None:
-        return _fail("validation", "designate_m_open_to_as payload is missing required field 'as_id'.")
+        result = _fail("validation", "designate_m_open_to_as payload is missing required field 'as_id'.")
+        _log_result("designate_m_open_to_as", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id)
+        result = _designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id)
+    _log_result("designate_m_open_to_as", result)
+    return result
 
 
 def _designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id): 
@@ -623,29 +661,45 @@ def do_m_transaction(data: dict[str, Any]):
         transaction_type = data["type"]
 
     if user_id is None:
-        return _fail("validation", "do_m_transaction payload is missing required field 'user_id'.")
+        result = _fail("validation", "do_m_transaction payload is missing required field 'user_id'.")
+        _log_result("do_m_transaction", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "do_m_transaction payload is missing required field 'market_id'.")
+        result = _fail("validation", "do_m_transaction payload is missing required field 'market_id'.")
+        _log_result("do_m_transaction", result)
+        return result
 
     if token_id is None:
-        return _fail("validation", "do_m_transaction payload is missing required field 'token_id'.")
+        result = _fail("validation", "do_m_transaction payload is missing required field 'token_id'.")
+        _log_result("do_m_transaction", result)
+        return result
 
     if side is None:
-        return _fail("validation", "do_m_transaction payload is missing required field 'side'.")
+        result = _fail("validation", "do_m_transaction payload is missing required field 'side'.")
+        _log_result("do_m_transaction", result)
+        return result
 
     if qty is None:
-        return _fail("validation", "do_m_transaction payload is missing required field 'qty'.")
+        result = _fail("validation", "do_m_transaction payload is missing required field 'qty'.")
+        _log_result("do_m_transaction", result)
+        return result
 
     if transaction_id is None:
-        return _fail("validation", "do_m_transaction payload is missing required field 'transaction_id'.")
+        result = _fail("validation", "do_m_transaction payload is missing required field 'transaction_id'.")
+        _log_result("do_m_transaction", result)
+        return result
 
     if transaction_type is None:
-        return _fail("validation", "do_m_transaction payload is missing required field 'transaction_type'.")
+        result = _fail("validation", "do_m_transaction payload is missing required field 'transaction_type'.")
+        _log_result("do_m_transaction", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _do_m_transaction(cursor, db, user_id, market_id, token_id, side, qty, transaction_id, transaction_type)
+        result = _do_m_transaction(cursor, db, user_id, market_id, token_id, side, qty, transaction_id, transaction_type)
+    _log_result("do_m_transaction", result)
+    return result
 
 
 def _do_m_transaction(cursor, db, user_id, market_id, token_id, side, qty, transaction_id, transaction_type): 
@@ -806,17 +860,25 @@ def do_m_payout(data: dict[str, Any]):
     token_id = data.get("token_id")
 
     if user_id is None:
-        return _fail("validation", "do_m_payout payload is missing required field 'user_id'.")
+        result = _fail("validation", "do_m_payout payload is missing required field 'user_id'.")
+        _log_result("do_m_payout", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "do_m_payout payload is missing required field 'market_id'.")
+        result = _fail("validation", "do_m_payout payload is missing required field 'market_id'.")
+        _log_result("do_m_payout", result)
+        return result
 
     if token_id is None:
-        return _fail("validation", "do_m_payout payload is missing required field 'token_id'.")
+        result = _fail("validation", "do_m_payout payload is missing required field 'token_id'.")
+        _log_result("do_m_payout", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _do_m_payout(cursor, db, user_id, market_id, token_id)
+        result = _do_m_payout(cursor, db, user_id, market_id, token_id)
+    _log_result("do_m_payout", result)
+    return result
 
 
 def _do_m_payout(cursor, db, user_id, market_id, token_id): 

@@ -1,7 +1,7 @@
 from typing import Any
 
 import pymysql
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -12,14 +12,20 @@ def read_o_events(data: dict[str, Any]):
     organization_id = data.get("organization_id")
 
     if user_id is None:
-        return _fail("validation", "read_o_events payload is missing required field 'user_id'.")
+        result = _fail("validation", "read_o_events payload is missing required field 'user_id'.")
+        _log_result("read_o_events", result)
+        return result
 
     if organization_id is None:
-        return _fail("validation", "read_o_events payload is missing required field 'organization_id'.")
+        result = _fail("validation", "read_o_events payload is missing required field 'organization_id'.")
+        _log_result("read_o_events", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _read_o_events(cursor, db, user_id, organization_id)
+        result = _read_o_events(cursor, db, user_id, organization_id)
+    _log_result("read_o_events", result)
+    return result
 
 
 def _read_o_events(cursor, db, user_id, organization_id):
@@ -95,14 +101,20 @@ def read_e(data: dict[str, Any]):
     event_id = data.get("event_id")
 
     if user_id is None:
-        return _fail("validation", "read_e payload is missing required field 'user_id'.")
+        result = _fail("validation", "read_e payload is missing required field 'user_id'.")
+        _log_result("read_e", result)
+        return result
 
     if event_id is None:
-        return _fail("validation", "read_e payload is missing required field 'event_id'.")
+        result = _fail("validation", "read_e payload is missing required field 'event_id'.")
+        _log_result("read_e", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _read_e(cursor, db, user_id, event_id)
+        result = _read_e(cursor, db, user_id, event_id)
+    _log_result("read_e", result)
+    return result
 
 
 def _read_e(cursor, db, user_id, event_id):

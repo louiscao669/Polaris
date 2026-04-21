@@ -1,7 +1,7 @@
 from typing import Any
 
 import pymysql
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -14,14 +14,20 @@ def update_o(data: dict[str, Any]):
     description = data.get("description")
 
     if user_id is None:
-        return _fail("validation", "update_o payload is missing required field 'user_id'.")
+        result = _fail("validation", "update_o payload is missing required field 'user_id'.")
+        _log_result("update_o", result)
+        return result
 
     if organization_id is None:
-        return _fail("validation", "update_o payload is missing required field 'organization_id'.")
+        result = _fail("validation", "update_o payload is missing required field 'organization_id'.")
+        _log_result("update_o", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _update_o(cursor, db, user_id, organization_id, name, description)
+        result = _update_o(cursor, db, user_id, organization_id, name, description)
+    _log_result("update_o", result)
+    return result
 
 
 def _update_o(cursor, db, user_id, organization_id, name=None, description=None):
@@ -106,17 +112,25 @@ def update_o_role(data: dict[str, Any]):
     desc = data.get("desc")
 
     if user_id is None:
-        return _fail("validation", "update_o_role payload is missing required field 'user_id'.")
+        result = _fail("validation", "update_o_role payload is missing required field 'user_id'.")
+        _log_result("update_o_role", result)
+        return result
 
     if organization_id is None:
-        return _fail("validation", "update_o_role payload is missing required field 'organization_id'.")
+        result = _fail("validation", "update_o_role payload is missing required field 'organization_id'.")
+        _log_result("update_o_role", result)
+        return result
 
     if role_id is None:
-        return _fail("validation", "update_o_role payload is missing required field 'role_id'.")
+        result = _fail("validation", "update_o_role payload is missing required field 'role_id'.")
+        _log_result("update_o_role", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _update_o_role(cursor, db, user_id, organization_id, role_id, desc)
+        result = _update_o_role(cursor, db, user_id, organization_id, role_id, desc)
+    _log_result("update_o_role", result)
+    return result
 
 
 def _update_o_role(cursor, db, user_id, organization_id, role_id, desc=None):
@@ -180,17 +194,25 @@ def update_o_token(data: dict[str, Any]):
     description = data.get("description")
 
     if user_id is None:
-        return _fail("validation", "update_o_token payload is missing required field 'user_id'.")
+        result = _fail("validation", "update_o_token payload is missing required field 'user_id'.")
+        _log_result("update_o_token", result)
+        return result
 
     if organization_id is None:
-        return _fail("validation", "update_o_token payload is missing required field 'organization_id'.")
+        result = _fail("validation", "update_o_token payload is missing required field 'organization_id'.")
+        _log_result("update_o_token", result)
+        return result
 
     if token_id is None:
-        return _fail("validation", "update_o_token payload is missing required field 'token_id'.")
+        result = _fail("validation", "update_o_token payload is missing required field 'token_id'.")
+        _log_result("update_o_token", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _update_o_token(cursor, db, user_id, organization_id, token_id, token_name, description)
+        result = _update_o_token(cursor, db, user_id, organization_id, token_id, token_name, description)
+    _log_result("update_o_token", result)
+    return result
 
 
 def _update_o_token(cursor, db, user_id, organization_id, token_id, token_name=None, description=None):

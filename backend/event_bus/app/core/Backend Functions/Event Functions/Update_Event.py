@@ -1,7 +1,7 @@
 from typing import Any
 
 import pymysql
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -13,14 +13,20 @@ def update_e(data: dict[str, Any]):
     caption = data.get("caption")
 
     if user_id is None:
-        return _fail("validation", "update_e payload is missing required field 'user_id'.")
+        result = _fail("validation", "update_e payload is missing required field 'user_id'.")
+        _log_result("update_e", result)
+        return result
 
     if event_id is None:
-        return _fail("validation", "update_e payload is missing required field 'event_id'.")
+        result = _fail("validation", "update_e payload is missing required field 'event_id'.")
+        _log_result("update_e", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _update_e(cursor, db, user_id, event_id, caption)
+        result = _update_e(cursor, db, user_id, event_id, caption)
+    _log_result("update_e", result)
+    return result
 
 
 def _update_e(cursor, db, user_id, event_id, caption=None):

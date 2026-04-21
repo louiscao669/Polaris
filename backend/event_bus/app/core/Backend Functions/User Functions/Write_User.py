@@ -1,7 +1,7 @@
 from typing import Any
 
 import pymysql
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -20,14 +20,20 @@ def user_login(data: dict[str, Any]):
     password = data.get("password")
 
     if username is None:
-        return _fail("validation", "user_login payload is missing required field 'username'.")
+        result = _fail("validation", "user_login payload is missing required field 'username'.")
+        _log_result("user_login", result)
+        return result
 
     if password is None:
-        return _fail("validation", "user_login payload is missing required field 'password'.")
+        result = _fail("validation", "user_login payload is missing required field 'password'.")
+        _log_result("user_login", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _user_login(cursor, db, username, password)
+        result = _user_login(cursor, db, username, password)
+    _log_result("user_login", result)
+    return result
 
 
 def _user_login(cursor, db, username, password):
@@ -59,23 +65,35 @@ def user_signup(data: dict[str, Any]):
     age = data.get("age")
 
     if first is None:
-        return _fail("validation", "user_signup payload is missing required field 'first'.")
+        result = _fail("validation", "user_signup payload is missing required field 'first'.")
+        _log_result("user_signup", result)
+        return result
 
     if last is None:
-        return _fail("validation", "user_signup payload is missing required field 'last'.")
+        result = _fail("validation", "user_signup payload is missing required field 'last'.")
+        _log_result("user_signup", result)
+        return result
 
     if email is None:
-        return _fail("validation", "user_signup payload is missing required field 'email'.")
+        result = _fail("validation", "user_signup payload is missing required field 'email'.")
+        _log_result("user_signup", result)
+        return result
 
     if username is None:
-        return _fail("validation", "user_signup payload is missing required field 'username'.")
+        result = _fail("validation", "user_signup payload is missing required field 'username'.")
+        _log_result("user_signup", result)
+        return result
 
     if password is None:
-        return _fail("validation", "user_signup payload is missing required field 'password'.")
+        result = _fail("validation", "user_signup payload is missing required field 'password'.")
+        _log_result("user_signup", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _user_signup(cursor, db, first, last, email, username, password, age)
+        result = _user_signup(cursor, db, first, last, email, username, password, age)
+    _log_result("user_signup", result)
+    return result
 
 
 def _user_signup(cursor, db, first, last, email, username, password, age=None):
@@ -133,11 +151,15 @@ def user_logout(data: dict[str, Any]):
     session_token = data.get("session_token")
 
     if session_token is None:
-        return _fail("validation", "user_logout payload is missing required field 'session_token'.")
+        result = _fail("validation", "user_logout payload is missing required field 'session_token'.")
+        _log_result("user_logout", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _user_logout(cursor, db, session_token)
+        result = _user_logout(cursor, db, session_token)
+    _log_result("user_logout", result)
+    return result
 
 
 def _user_logout(cursor, db, session_token):

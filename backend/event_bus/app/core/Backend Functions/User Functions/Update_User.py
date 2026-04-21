@@ -1,7 +1,7 @@
 from typing import Any
 
 import pymysql
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -25,14 +25,20 @@ def update_user_profile(data: dict[str, Any]):
     age = data.get("age")
 
     if user_id is None:
-        return _fail("validation", "update_user_profile payload is missing required field 'user_id'.")
+        result = _fail("validation", "update_user_profile payload is missing required field 'user_id'.")
+        _log_result("update_user_profile", result)
+        return result
 
     if target_user_id is None:
-        return _fail("validation", "update_user_profile payload is missing required field 'target_user_id'.")
+        result = _fail("validation", "update_user_profile payload is missing required field 'target_user_id'.")
+        _log_result("update_user_profile", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _update_user_profile(cursor, db, user_id, target_user_id, username, email, first, last, age)
+        result = _update_user_profile(cursor, db, user_id, target_user_id, username, email, first, last, age)
+    _log_result("update_user_profile", result)
+    return result
 
 
 def _update_user_profile(cursor, db, user_id, target_user_id, username=None, email=None, first=None, last=None, age=None):
@@ -111,17 +117,25 @@ def update_user_password(data: dict[str, Any]):
     new_password = data.get("new_password")
 
     if user_id is None:
-        return _fail("validation", "update_user_password payload is missing required field 'user_id'.")
+        result = _fail("validation", "update_user_password payload is missing required field 'user_id'.")
+        _log_result("update_user_password", result)
+        return result
 
     if current_password is None:
-        return _fail("validation", "update_user_password payload is missing required field 'current_password'.")
+        result = _fail("validation", "update_user_password payload is missing required field 'current_password'.")
+        _log_result("update_user_password", result)
+        return result
 
     if new_password is None:
-        return _fail("validation", "update_user_password payload is missing required field 'new_password'.")
+        result = _fail("validation", "update_user_password payload is missing required field 'new_password'.")
+        _log_result("update_user_password", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _update_user_password(cursor, db, user_id, current_password, new_password)
+        result = _update_user_password(cursor, db, user_id, current_password, new_password)
+    _log_result("update_user_password", result)
+    return result
 
 
 def _update_user_password(cursor, db, user_id, current_password, new_password):

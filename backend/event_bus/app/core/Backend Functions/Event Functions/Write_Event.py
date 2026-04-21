@@ -1,7 +1,7 @@
 from typing import Any
 
 import pymysql
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -13,24 +13,25 @@ def create_e(data: dict[str, Any]):
     caption = data.get("caption")
 
     if user_id is None:
-        return _fail("validation", "create_e payload is missing required field 'user_id'.")
+        result = _fail("validation", "create_e payload is missing required field 'user_id'.")
+        _log_result("create_e", result)
+        return result
 
     if organization_id is None:
-        return _fail("validation", "create_e payload is missing required field 'organization_id'.")
+        result = _fail("validation", "create_e payload is missing required field 'organization_id'.")
+        _log_result("create_e", result)
+        return result
 
     if caption is None:
-        return _fail("validation", "create_e payload is missing required field 'caption'.")
+        result = _fail("validation", "create_e payload is missing required field 'caption'.")
+        _log_result("create_e", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_e(
-            cursor,
-            db,
-            user_id,
-            organization_id,
-            caption,
-            data.get("event_id"),
-        )
+        result = _create_e(cursor, db, user_id, organization_id, caption)
+    _log_result("create_e", result)
+    return result
 
 
 def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=None): 
@@ -119,17 +120,25 @@ def designate_e_token(data: dict[str, Any]):
     token_id = data.get("token_id")
 
     if user_id is None:
-        return _fail("validation", "designate_e_token payload is missing required field 'user_id'.")
+        result = _fail("validation", "designate_e_token payload is missing required field 'user_id'.")
+        _log_result("designate_e_token", result)
+        return result
 
     if event_id is None:
-        return _fail("validation", "designate_e_token payload is missing required field 'event_id'.")
+        result = _fail("validation", "designate_e_token payload is missing required field 'event_id'.")
+        _log_result("designate_e_token", result)
+        return result
 
     if token_id is None:
-        return _fail("validation", "designate_e_token payload is missing required field 'token_id'.")
+        result = _fail("validation", "designate_e_token payload is missing required field 'token_id'.")
+        _log_result("designate_e_token", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _designate_e_token(cursor, db, user_id, event_id, token_id)
+        result = _designate_e_token(cursor, db, user_id, event_id, token_id)
+    _log_result("designate_e_token", result)
+    return result
 
 
 def _designate_e_token(cursor, db, user_id, event_id, token_id): 
@@ -212,17 +221,25 @@ def designate_e_market_creator(data: dict[str, Any]):
     market_creator_id = data.get("market_creator_id")
 
     if user_id is None:
-        return _fail("validation", "designate_e_market_creator payload is missing required field 'user_id'.")
+        result = _fail("validation", "designate_e_market_creator payload is missing required field 'user_id'.")
+        _log_result("designate_e_market_creator", result)
+        return result
 
     if event_id is None:
-        return _fail("validation", "designate_e_market_creator payload is missing required field 'event_id'.")
+        result = _fail("validation", "designate_e_market_creator payload is missing required field 'event_id'.")
+        _log_result("designate_e_market_creator", result)
+        return result
 
     if market_creator_id is None:
-        return _fail("validation", "designate_e_market_creator payload is missing required field 'market_creator_id'.")
+        result = _fail("validation", "designate_e_market_creator payload is missing required field 'market_creator_id'.")
+        _log_result("designate_e_market_creator", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id)
+        result = _designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id)
+    _log_result("designate_e_market_creator", result)
+    return result
 
 
 def _designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id): 
@@ -306,20 +323,30 @@ def designate_e_contraint(data: dict[str, Any]):
     value = data.get("value")
 
     if user_id is None:
-        return _fail("validation", "designate_e_contraint payload is missing required field 'user_id'.")
+        result = _fail("validation", "designate_e_contraint payload is missing required field 'user_id'.")
+        _log_result("designate_e_contraint", result)
+        return result
 
     if event_id is None:
-        return _fail("validation", "designate_e_contraint payload is missing required field 'event_id'.")
+        result = _fail("validation", "designate_e_contraint payload is missing required field 'event_id'.")
+        _log_result("designate_e_contraint", result)
+        return result
 
     if constraint_id is None:
-        return _fail("validation", "designate_e_contraint payload is missing required field 'constraint_id'.")
+        result = _fail("validation", "designate_e_contraint payload is missing required field 'constraint_id'.")
+        _log_result("designate_e_contraint", result)
+        return result
 
     if value is None:
-        return _fail("validation", "designate_e_contraint payload is missing required field 'value'.")
+        result = _fail("validation", "designate_e_contraint payload is missing required field 'value'.")
+        _log_result("designate_e_contraint", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value)
+        result = _designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value)
+    _log_result("designate_e_contraint", result)
+    return result
 
 
 def _designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value): 
@@ -415,17 +442,25 @@ def designate_e_open_to(data: dict[str, Any]):
     role_id = data.get("role_id")
 
     if user_id is None:
-        return _fail("validation", "designate_e_open_to payload is missing required field 'user_id'.")
+        result = _fail("validation", "designate_e_open_to payload is missing required field 'user_id'.")
+        _log_result("designate_e_open_to", result)
+        return result
 
     if event_id is None:
-        return _fail("validation", "designate_e_open_to payload is missing required field 'event_id'.")
+        result = _fail("validation", "designate_e_open_to payload is missing required field 'event_id'.")
+        _log_result("designate_e_open_to", result)
+        return result
 
     if role_id is None:
-        return _fail("validation", "designate_e_open_to payload is missing required field 'role_id'.")
+        result = _fail("validation", "designate_e_open_to payload is missing required field 'role_id'.")
+        _log_result("designate_e_open_to", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _designate_e_open_to(cursor, db, user_id, event_id, role_id)
+        result = _designate_e_open_to(cursor, db, user_id, event_id, role_id)
+    _log_result("designate_e_open_to", result)
+    return result
 
 
 def _designate_e_open_to(cursor, db, user_id, event_id, role_id): 
@@ -507,14 +542,20 @@ def designate_e_closed(data: dict[str, Any]):
     event_id = data.get("event_id")
 
     if user_id is None:
-        return _fail("validation", "designate_e_closed payload is missing required field 'user_id'.")
+        result = _fail("validation", "designate_e_closed payload is missing required field 'user_id'.")
+        _log_result("designate_e_closed", result)
+        return result
 
     if event_id is None:
-        return _fail("validation", "designate_e_closed payload is missing required field 'event_id'.")
+        result = _fail("validation", "designate_e_closed payload is missing required field 'event_id'.")
+        _log_result("designate_e_closed", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _designate_e_closed(cursor, db, user_id, event_id)
+        result = _designate_e_closed(cursor, db, user_id, event_id)
+    _log_result("designate_e_closed", result)
+    return result
 
 
 def _designate_e_closed(cursor, db, user_id, event_id): 

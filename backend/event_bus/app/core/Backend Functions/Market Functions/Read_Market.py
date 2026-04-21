@@ -2,7 +2,7 @@ from typing import Any
 
 import pymysql, datetime
 from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -13,14 +13,20 @@ def stats_m_liquidity(data: dict[str, Any]):
     market_id = data.get("market_id")
 
     if user_id is None:
-        return _fail("validation", "stats_m_liquidity payload is missing required field 'user_id'.")
+        result = _fail("validation", "stats_m_liquidity payload is missing required field 'user_id'.")
+        _log_result("stats_m_liquidity", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "stats_m_liquidity payload is missing required field 'market_id'.")
+        result = _fail("validation", "stats_m_liquidity payload is missing required field 'market_id'.")
+        _log_result("stats_m_liquidity", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _stats_m_liquidity(cursor, db, user_id, market_id)
+        result = _stats_m_liquidity(cursor, db, user_id, market_id)
+    _log_result("stats_m_liquidity", result)
+    return result
 
 
 def _stats_m_liquidity(cursor, db, user_id, market_id): 
@@ -90,14 +96,20 @@ def stats_m_time_focus(data: dict[str, Any]):
     market_id = data.get("market_id")
 
     if user_id is None:
-        return _fail("validation", "stats_m_time_focus payload is missing required field 'user_id'.")
+        result = _fail("validation", "stats_m_time_focus payload is missing required field 'user_id'.")
+        _log_result("stats_m_time_focus", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "stats_m_time_focus payload is missing required field 'market_id'.")
+        result = _fail("validation", "stats_m_time_focus payload is missing required field 'market_id'.")
+        _log_result("stats_m_time_focus", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _stats_m_time_focus(cursor, db, user_id, market_id)
+        result = _stats_m_time_focus(cursor, db, user_id, market_id)
+    _log_result("stats_m_time_focus", result)
+    return result
 
 
 def _stats_m_time_focus(cursor, db, user_id, market_id): 
@@ -182,14 +194,20 @@ def stats_m_whales(data: dict[str, Any]):
     market_id = data.get("market_id")
 
     if user_id is None:
-        return _fail("validation", "stats_m_whales payload is missing required field 'user_id'.")
+        result = _fail("validation", "stats_m_whales payload is missing required field 'user_id'.")
+        _log_result("stats_m_whales", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "stats_m_whales payload is missing required field 'market_id'.")
+        result = _fail("validation", "stats_m_whales payload is missing required field 'market_id'.")
+        _log_result("stats_m_whales", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _stats_m_whales(cursor, db, user_id, market_id)
+        result = _stats_m_whales(cursor, db, user_id, market_id)
+    _log_result("stats_m_whales", result)
+    return result
 
 
 def _stats_m_whales(cursor, db, user_id, market_id): 
@@ -273,17 +291,25 @@ def points_m(data: dict[str, Any]):
     span = data.get("span")
 
     if user_id is None:
-        return _fail("validation", "points_m payload is missing required field 'user_id'.")
+        result = _fail("validation", "points_m payload is missing required field 'user_id'.")
+        _log_result("points_m", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "points_m payload is missing required field 'market_id'.")
+        result = _fail("validation", "points_m payload is missing required field 'market_id'.")
+        _log_result("points_m", result)
+        return result
 
     if span is None:
-        return _fail("validation", "points_m payload is missing required field 'span'.")
+        result = _fail("validation", "points_m payload is missing required field 'span'.")
+        _log_result("points_m", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _points_m(cursor, db, user_id, market_id, span)
+        result = _points_m(cursor, db, user_id, market_id, span)
+    _log_result("points_m", result)
+    return result
 
 
 def _points_m(cursor, db, user_id, market_id, span): 
@@ -363,14 +389,20 @@ def stats_m_trade_distribution(data: dict[str, Any]):
     market_id = data.get("market_id")
 
     if user_id is None:
-        return _fail("validation", "stats_m_trade_distribution payload is missing required field 'user_id'.")
+        result = _fail("validation", "stats_m_trade_distribution payload is missing required field 'user_id'.")
+        _log_result("stats_m_trade_distribution", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "stats_m_trade_distribution payload is missing required field 'market_id'.")
+        result = _fail("validation", "stats_m_trade_distribution payload is missing required field 'market_id'.")
+        _log_result("stats_m_trade_distribution", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _stats_m_trade_distribution(cursor, db, user_id, market_id)
+        result = _stats_m_trade_distribution(cursor, db, user_id, market_id)
+    _log_result("stats_m_trade_distribution", result)
+    return result
 
 
 def _stats_m_trade_distribution(cursor, db, user_id, market_id):
@@ -432,17 +464,25 @@ def stats_m_window_comparison(data: dict[str, Any]):
     hours = data.get("hours")
 
     if user_id is None:
-        return _fail("validation", "stats_m_window_comparison payload is missing required field 'user_id'.")
+        result = _fail("validation", "stats_m_window_comparison payload is missing required field 'user_id'.")
+        _log_result("stats_m_window_comparison", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "stats_m_window_comparison payload is missing required field 'market_id'.")
+        result = _fail("validation", "stats_m_window_comparison payload is missing required field 'market_id'.")
+        _log_result("stats_m_window_comparison", result)
+        return result
 
     if hours is None:
-        return _fail("validation", "stats_m_window_comparison payload is missing required field 'hours'.")
+        result = _fail("validation", "stats_m_window_comparison payload is missing required field 'hours'.")
+        _log_result("stats_m_window_comparison", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _stats_m_window_comparison(cursor, db, user_id, market_id, hours)
+        result = _stats_m_window_comparison(cursor, db, user_id, market_id, hours)
+    _log_result("stats_m_window_comparison", result)
+    return result
 
 
 def _stats_m_window_comparison(cursor, db, user_id, market_id, hours):
@@ -508,14 +548,20 @@ def read_e_markets(data: dict[str, Any]):
     event_id = data.get("event_id")
 
     if user_id is None:
-        return _fail("validation", "read_e_markets payload is missing required field 'user_id'.")
+        result = _fail("validation", "read_e_markets payload is missing required field 'user_id'.")
+        _log_result("read_e_markets", result)
+        return result
 
     if event_id is None:
-        return _fail("validation", "read_e_markets payload is missing required field 'event_id'.")
+        result = _fail("validation", "read_e_markets payload is missing required field 'event_id'.")
+        _log_result("read_e_markets", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _read_e_markets(cursor, db, user_id, event_id)
+        result = _read_e_markets(cursor, db, user_id, event_id)
+    _log_result("read_e_markets", result)
+    return result
 
 
 def _read_e_markets(cursor, db, user_id, event_id):
@@ -622,14 +668,20 @@ def read_m(data: dict[str, Any]):
     market_id = data.get("market_id")
 
     if user_id is None:
-        return _fail("validation", "read_m payload is missing required field 'user_id'.")
+        result = _fail("validation", "read_m payload is missing required field 'user_id'.")
+        _log_result("read_m", result)
+        return result
 
     if market_id is None:
-        return _fail("validation", "read_m payload is missing required field 'market_id'.")
+        result = _fail("validation", "read_m payload is missing required field 'market_id'.")
+        _log_result("read_m", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _read_m(cursor, db, user_id, market_id)
+        result = _read_m(cursor, db, user_id, market_id)
+    _log_result("read_m", result)
+    return result
 
 
 def _read_m(cursor, db, user_id, market_id):

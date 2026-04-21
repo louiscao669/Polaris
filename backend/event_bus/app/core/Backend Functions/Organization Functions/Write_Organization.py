@@ -1,7 +1,7 @@
 from typing import Any
 
 import pymysql
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -13,17 +13,25 @@ def create_o(data: dict[str, Any]):
     description = data.get("description")
 
     if user_id is None:
-        return _fail("validation", "create_o payload is missing required field 'user_id'.")
+        result = _fail("validation", "create_o payload is missing required field 'user_id'.")
+        _log_result("create_o", result)
+        return result
 
     if name is None:
-        return _fail("validation", "create_o payload is missing required field 'name'.")
+        result = _fail("validation", "create_o payload is missing required field 'name'.")
+        _log_result("create_o", result)
+        return result
 
     if description is None:
-        return _fail("validation", "create_o payload is missing required field 'description'.")
+        result = _fail("validation", "create_o payload is missing required field 'description'.")
+        _log_result("create_o", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_o(cursor, db, user_id, name, description, data.get("organization_id"))
+        result = _create_o(cursor, db, user_id, name, description)
+    _log_result("create_o", result)
+    return result
 
 
 def _create_o(cursor, db, user_id, name, description, explicit_org_id=None):
@@ -130,20 +138,30 @@ def create_o_role(data: dict[str, Any]):
     desc = data.get("desc")
 
     if user_id is None:
-        return _fail("validation", "create_o_role payload is missing required field 'user_id'.")
+        result = _fail("validation", "create_o_role payload is missing required field 'user_id'.")
+        _log_result("create_o_role", result)
+        return result
 
     if organization_id is None:
-        return _fail("validation", "create_o_role payload is missing required field 'organization_id'.")
+        result = _fail("validation", "create_o_role payload is missing required field 'organization_id'.")
+        _log_result("create_o_role", result)
+        return result
 
     if name is None:
-        return _fail("validation", "create_o_role payload is missing required field 'name'.")
+        result = _fail("validation", "create_o_role payload is missing required field 'name'.")
+        _log_result("create_o_role", result)
+        return result
 
     if desc is None:
-        return _fail("validation", "create_o_role payload is missing required field 'desc'.")
+        result = _fail("validation", "create_o_role payload is missing required field 'desc'.")
+        _log_result("create_o_role", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_o_role(cursor, db, user_id, organization_id, name, desc)
+        result = _create_o_role(cursor, db, user_id, organization_id, name, desc)
+    _log_result("create_o_role", result)
+    return result
 
 
 def _create_o_role(cursor, db, user_id, organization_id, name, desc): 
@@ -222,25 +240,25 @@ def create_o_token(data: dict[str, Any]):
     description = data.get("description")
 
     if user_id is None:
-        return _fail("validation", "create_o_token payload is missing required field 'user_id'.")
+        result = _fail("validation", "create_o_token payload is missing required field 'user_id'.")
+        _log_result("create_o_token", result)
+        return result
 
     if organization_id is None:
-        return _fail("validation", "create_o_token payload is missing required field 'organization_id'.")
+        result = _fail("validation", "create_o_token payload is missing required field 'organization_id'.")
+        _log_result("create_o_token", result)
+        return result
 
     if token_name is None:
-        return _fail("validation", "create_o_token payload is missing required field 'token_name'.")
+        result = _fail("validation", "create_o_token payload is missing required field 'token_name'.")
+        _log_result("create_o_token", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_o_token(
-            cursor,
-            db,
-            user_id,
-            organization_id,
-            token_name,
-            description,
-            data.get("token_id"),
-        )
+        result = _create_o_token(cursor, db, user_id, organization_id, token_name, description)
+    _log_result("create_o_token", result)
+    return result
 
 
 def _create_o_token(
@@ -340,20 +358,30 @@ def create_user_in_role(data: dict[str, Any]):
     role_id = data.get("role_id")
 
     if user_id is None:
-        return _fail("validation", "create_user_in_role payload is missing required field 'user_id'.")
+        result = _fail("validation", "create_user_in_role payload is missing required field 'user_id'.")
+        _log_result("create_user_in_role", result)
+        return result
 
     if organization_id is None:
-        return _fail("validation", "create_user_in_role payload is missing required field 'organization_id'.")
+        result = _fail("validation", "create_user_in_role payload is missing required field 'organization_id'.")
+        _log_result("create_user_in_role", result)
+        return result
 
     if target_user_id is None:
-        return _fail("validation", "create_user_in_role payload is missing required field 'target_user_id'.")
+        result = _fail("validation", "create_user_in_role payload is missing required field 'target_user_id'.")
+        _log_result("create_user_in_role", result)
+        return result
 
     if role_id is None:
-        return _fail("validation", "create_user_in_role payload is missing required field 'role_id'.")
+        result = _fail("validation", "create_user_in_role payload is missing required field 'role_id'.")
+        _log_result("create_user_in_role", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _create_user_in_role(cursor, db, user_id, organization_id, target_user_id, role_id)
+        result = _create_user_in_role(cursor, db, user_id, organization_id, target_user_id, role_id)
+    _log_result("create_user_in_role", result)
+    return result
 
 
 def _create_user_in_role(cursor, db, user_id, organization_id, target_user_id, role_id):

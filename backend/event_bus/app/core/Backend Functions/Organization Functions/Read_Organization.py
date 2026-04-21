@@ -1,7 +1,7 @@
 from typing import Any
 
 import pymysql
-from fail import _fail
+from fail import _fail, _log_result
 try:
     from app.database import get_connection
 except ImportError:
@@ -11,11 +11,15 @@ def read_user_organizations(data: dict[str, Any]):
     user_id = data.get("user_id")
 
     if user_id is None:
-        return _fail("validation", "read_user_organizations payload is missing required field 'user_id'.")
+        result = _fail("validation", "read_user_organizations payload is missing required field 'user_id'.")
+        _log_result("read_user_organizations", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _read_user_organizations(cursor, db, user_id)
+        result = _read_user_organizations(cursor, db, user_id)
+    _log_result("read_user_organizations", result)
+    return result
 
 
 def _read_user_organizations(cursor, db, user_id):
@@ -74,14 +78,20 @@ def read_o(data: dict[str, Any]):
     organization_id = data.get("organization_id")
 
     if user_id is None:
-        return _fail("validation", "read_o payload is missing required field 'user_id'.")
+        result = _fail("validation", "read_o payload is missing required field 'user_id'.")
+        _log_result("read_o", result)
+        return result
 
     if organization_id is None:
-        return _fail("validation", "read_o payload is missing required field 'organization_id'.")
+        result = _fail("validation", "read_o payload is missing required field 'organization_id'.")
+        _log_result("read_o", result)
+        return result
 
     with get_connection() as db:
         cursor = db.cursor()
-        return _read_o(cursor, db, user_id, organization_id)
+        result = _read_o(cursor, db, user_id, organization_id)
+    _log_result("read_o", result)
+    return result
 
 
 def _read_o(cursor, db, user_id, organization_id):
