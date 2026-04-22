@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import OrganizationMembership from './OrganizationMembership';
-import { API_BASE, pollOperation, readJson, submitV2Operation } from '../lib/api';
+import { pollOperation, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 
 function Organization() { 
@@ -26,16 +26,17 @@ function Organization() {
 
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId') || getStoredUserId();
+  const organizationQuery = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
 
   const loadOrganization = async () => {
-    if (normalizedOrganizationId == null) {
+    if (normalizedOrganizationId == null || !userId) {
       setOrgData(null);
       return;
     }
     setOrgLoading(true);
     try {
-      const data = await readJson(`/organizations/${normalizedOrganizationId}`);
-        setOrgData(data);
+      const data = await readJson(`/organizations/${normalizedOrganizationId}${organizationQuery}`);
+      setOrgData(data);
     } catch (e) {
       console.error(e);
       setOrgData(null);
@@ -45,8 +46,7 @@ function Organization() {
   };
 
   const loadOrganizationStats = async () => {
-
-    if (normalizedOrganizationId == null) {
+    if (normalizedOrganizationId == null || !userId) {
       setNumParticipants(0);
       setNumEvents(0);
       setNumMarkets(0);
@@ -55,35 +55,24 @@ function Organization() {
     }
   
     setNumParticipantsLoading(true);
-    try {
-      const data = await readJson(`/dashboard/organizations/${normalizedOrganizationId}/num-participants`);
-      setNumParticipants(data);
-    } catch (e) {
-      console.error(e);
-      setNumParticipants(0);
-    } finally {
-      setNumParticipantsLoading(false);
-    }
+    setNumParticipants(Array.isArray(orgData?.members) ? orgData.members.length : 0);
+    setNumParticipantsLoading(false);
 
     setNumEventsLoading(true);
-    try {
-      const data = await readJson(`/dashboard/organizations/${normalizedOrganizationId}/num-events`);
-      setNumEvents(data);
-    } catch (e) {
-      console.error(e);
-      setNumEvents(0);
-    } finally {
-      setNumEventsLoading(false);
-    }
+    setNumEvents(Array.isArray(events) ? events.length : 0);
+    setNumEventsLoading(false);
 
     setNumMarketsLoading(true);
     try {
-      let numMarkets = 0;
-      for (const event of events) {
-        const data = await readJson(`/dashboard/events/${event.event_id}/num-markets`);
-        numMarkets += data;
-      }
-      setNumMarkets(numMarkets);
+      const marketCounts = await Promise.all(
+        events.map(async (event) => {
+          const markets = await readJson(
+            `/events/${event.event_id}/markets?user_id=${encodeURIComponent(userId)}`
+          );
+          return Array.isArray(markets) ? markets.length : 0;
+        })
+      );
+      setNumMarkets(marketCounts.reduce((sum, count) => sum + count, 0));
     } catch (e) {
       console.error(e);
       setNumMarkets(0);
@@ -91,27 +80,22 @@ function Organization() {
       setNumMarketsLoading(false);
     }
 
-    try {
-      const data = await readJson(`/dashboard/organizations/${normalizedOrganizationId}/total-volume`);
-      setTotalVolume(Number(data) || 0);
-    } catch (e) {
-      console.error(e);
-      setTotalVolume(0);
-    }
+    // The event-bus API does not expose organization total-volume yet.
+    setTotalVolume(0);
   };
 
   useEffect(() => {
     loadOrganizationStats();
-  }, [normalizedOrganizationId, events]);
+  }, [normalizedOrganizationId, userId, orgData, events]);
 
   const loadOrganizationEvents = async () => {
-    if (normalizedOrganizationId == null) {
+    if (normalizedOrganizationId == null || !userId) {
       setEvents([]);
       return;
     }
     setEventsLoading(true);
     try {
-      const data = await readJson(`/organizations/${normalizedOrganizationId}/events`);
+      const data = await readJson(`/organizations/${normalizedOrganizationId}/events${organizationQuery}`);
       setEvents(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
@@ -125,7 +109,7 @@ function Organization() {
     setEvents([]);
     loadOrganization();
     loadOrganizationEvents();
-  }, [normalizedOrganizationId]);
+  }, [normalizedOrganizationId, userId]);
 
   const stats = [
     { label: 'Active Events', value: numEvents },

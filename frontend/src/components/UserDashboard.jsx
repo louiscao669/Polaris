@@ -86,7 +86,7 @@ export default function UserDashboard() {
       setEventsError(null);
       try {
         const q = new URLSearchParams({ user_id: String(userId) });
-        const data = await readJson(`/dashboard/organizations/${orgId}/events?${q.toString()}`);
+        const data = await readJson(`/organizations/${orgId}/events?${q.toString()}`);
         setEvents(Array.isArray(data) ? data : []);
       } catch (e) {
         setEventsError(e.message || 'Failed to load events');
