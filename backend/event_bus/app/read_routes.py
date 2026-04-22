@@ -133,6 +133,11 @@ def http_create_user_in_role(payload: dict[str, Any] = Body(...)):
     return _apply(_write_org.create_user_in_role, payload)
 
 
+@router.post("/organization-token-grants")
+def http_grant_organization_token(payload: dict[str, Any] = Body(...)):
+    return _apply(_write_org.grant_o_token_to_user, payload)
+
+
 @router.put("/organizations/{organization_id}")
 def http_update_organization(
     organization_id: int,

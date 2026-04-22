@@ -223,6 +223,26 @@ function Organization() {
     }
   };
 
+  const handleGrantTokens = async () => {
+    const targetUserId = window.prompt('User id to receive tokens');
+    const tokenId = window.prompt('Organization token id');
+    const qty = window.prompt('Quantity of tokens to grant');
+    if (!targetUserId || !tokenId || !qty || !canManageOrganization) return;
+    setAdminError(null);
+    try {
+      await postJson('/organization-token-grants', {
+        user_id: Number(userId),
+        organization_id: normalizedOrganizationId,
+        token_id: Number(tokenId),
+        target_user_id: Number(targetUserId),
+        qty: Number(qty),
+      });
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to grant tokens');
+    }
+  };
+
   return (
     <section className="organization-page" aria-label="Organizer dashboard">
       <div className="organization-shell">
@@ -271,6 +291,9 @@ function Organization() {
                 </button>
                 <button type="button" className="organization-actions__secondary" onClick={handleAssignRole}>
                   Assign Role
+                </button>
+                <button type="button" className="organization-actions__secondary" onClick={handleGrantTokens}>
+                  Grant Tokens
                 </button>
               </>
             )}

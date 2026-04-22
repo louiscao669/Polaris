@@ -283,6 +283,27 @@ export default function EventDashboard() {
     }
   };
 
+  const handleAddEventRule = async () => {
+    const constraintId = window.prompt(
+      'Constraint id for the event rule (for example, a configured max-spend rule id)'
+    );
+    const value = window.prompt('Constraint value');
+    if (!constraintId || !value || !canManageEvent) return;
+    setAdminError(null);
+    try {
+      await postJson('/events/designate-constraint', {
+        user_id: Number(userId),
+        event_id: Number(eventId),
+        constraint_id: Number(constraintId),
+        value: Number(value),
+      });
+      await loadEvent();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to add event rule');
+    }
+  };
+
   return (
     <section className="event-page" aria-label="Event dashboard">
       <div className="event-shell">
@@ -309,6 +330,7 @@ export default function EventDashboard() {
               <button type="button" className="analyze-btn" onClick={handleAllowRole}>Allow Role</button>
               <button type="button" className="analyze-btn" onClick={handleAddEventToken}>Add Token</button>
               <button type="button" className="analyze-btn" onClick={handleAddMarketCreator}>Add Market Creator</button>
+              <button type="button" className="analyze-btn" onClick={handleAddEventRule}>Add Rule</button>
             </>
           )}
         </div>

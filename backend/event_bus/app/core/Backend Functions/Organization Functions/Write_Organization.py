@@ -480,3 +480,104 @@ def _create_user_in_role(cursor, db, user_id, organization_id, target_user_id, r
         print(f"Transaction failed, rolled back: {e}")
 
         return _fail("validation", f"Unable to assign the user to the organization role: {e}")
+
+
+def grant_o_token_to_user(data: dict[str, Any]):
+    user_id = data.get("user_id")
+    organization_id = data.get("organization_id")
+    token_id = data.get("token_id")
+    target_user_id = data.get("target_user_id")
+    qty = data.get("qty")
+
+    if user_id is None:
+        result = _fail("validation", "grant_o_token_to_user payload is missing required field 'user_id'.")
+        _log_result("grant_o_token_to_user", result)
+        return result
+
+    if organization_id is None:
+        result = _fail("validation", "grant_o_token_to_user payload is missing required field 'organization_id'.")
+        _log_result("grant_o_token_to_user", result)
+        return result
+
+    if token_id is None:
+        result = _fail("validation", "grant_o_token_to_user payload is missing required field 'token_id'.")
+        _log_result("grant_o_token_to_user", result)
+        return result
+
+    if target_user_id is None:
+        result = _fail("validation", "grant_o_token_to_user payload is missing required field 'target_user_id'.")
+        _log_result("grant_o_token_to_user", result)
+        return result
+
+    if qty is None:
+        result = _fail("validation", "grant_o_token_to_user payload is missing required field 'qty'.")
+        _log_result("grant_o_token_to_user", result)
+        return result
+
+    with get_connection() as db:
+        cursor = db.cursor()
+        result = _grant_o_token_to_user(cursor, db, user_id, organization_id, token_id, target_user_id, qty)
+    _log_result("grant_o_token_to_user", result)
+    return result
+
+
+def _grant_o_token_to_user(cursor, db, user_id, organization_id, token_id, target_user_id, qty):
+    try:
+        qty = int(qty)
+        if qty <= 0:
+            return _fail("validation", "Granted token quantity must be greater than zero.")
+
+        # Check if user is the organization leader
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization_leader
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, user_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("permission", "Only the organization leader can distribute organization tokens.")
+
+        # Check if the token belongs to the organization
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization_token
+            WHERE org_id = %s AND token_id = %s
+            """,
+            (organization_id, token_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("validation", "That token does not belong to the organization.")
+
+        # Check if the target user exists and belongs to the organization (leader or member)
+        cursor.execute(
+            """
+            SELECT 1
+            FROM users u
+            LEFT JOIN organization_leader ol ON ol.org_id = %s AND ol.user_id = u.id
+            LEFT JOIN user_org_role uor ON uor.org_id = %s AND uor.user_id = u.id
+            WHERE u.id = %s AND (ol.user_id IS NOT NULL OR uor.user_id IS NOT NULL)
+            """,
+            (organization_id, organization_id, target_user_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("validation", "That user is not part of the organization.")
+
+        cursor.execute(
+            """
+            INSERT INTO user_token_stock (token_id, user_id, qty)
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE qty = qty + VALUES(qty)
+            """,
+            (token_id, target_user_id, qty),
+        )
+        db.commit()
+        return True
+
+    except Exception as e:
+        db.rollback()
+        print(f"Transaction failed, rolled back: {e}")
+
+        return _fail("validation", f"Unable to distribute organization tokens: {e}")

@@ -299,6 +299,27 @@ export default function MarketPage() {
     }
   };
 
+  const handleAddMarketRule = async () => {
+    const constraintId = window.prompt(
+      'Constraint id for the market rule (for example, a configured max-spend rule id)'
+    );
+    const value = window.prompt('Constraint value');
+    if (!constraintId || !value || !canManageMarket) return;
+    setAdminError(null);
+    try {
+      await postJson('/markets/designate-constraint', {
+        user_id: Number(userId),
+        market_id: Number(marketId),
+        constraint_id: Number(constraintId),
+        value: Number(value),
+      });
+      await refreshAfterTrade();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to add market rule');
+    }
+  };
+
   return (
     <section className="market-page" aria-label="Market page">
       <div className="market-shell">
@@ -320,6 +341,7 @@ export default function MarketPage() {
               <button type="button" className="market-toggle" onClick={handleRenameMarket}>Edit Market</button>
               <button type="button" className="market-toggle" onClick={handleAddMarketToken}>Add Token</button>
               <button type="button" className="market-toggle" onClick={handleAllowMarketRole}>Allow Role</button>
+              <button type="button" className="market-toggle" onClick={handleAddMarketRule}>Add Rule</button>
               <button type="button" className="market-toggle" onClick={handleResolveMarket}>Resolve</button>
             </>
           )}
