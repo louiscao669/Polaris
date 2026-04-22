@@ -3,6 +3,18 @@ from typing import Any
 import pymysql
 from fail import _fail, _log_result
 try:
+    from app.read_cache import (
+        invalidate_event_markets_cache,
+        invalidate_market_detail_cache,
+        invalidate_org_events_cache,
+    )
+except ImportError:
+    from backend.event_bus.app.read_cache import (
+        invalidate_event_markets_cache,
+        invalidate_market_detail_cache,
+        invalidate_org_events_cache,
+    )
+try:
     from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
@@ -79,6 +91,18 @@ def _update_e(cursor, db, user_id, event_id, caption=None):
             (next_caption, event_id),
         )
         db.commit()
+        invalidate_event_markets_cache(int(event_id))
+        invalidate_org_events_cache(int(organization_id))
+        cursor.execute(
+            """
+            SELECT id
+            FROM market
+            WHERE event_id = %s
+            """,
+            (event_id,),
+        )
+        for row in cursor.fetchall():
+            invalidate_market_detail_cache(int(row[0]))
 
         return event_id
 

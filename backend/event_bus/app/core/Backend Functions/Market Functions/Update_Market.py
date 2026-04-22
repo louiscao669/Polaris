@@ -4,6 +4,18 @@ import pymysql, datetime
 from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
 from fail import _fail, _log_result
 try:
+    from app.read_cache import (
+        invalidate_event_markets_cache,
+        invalidate_market_detail_cache,
+        invalidate_market_stats_cache,
+    )
+except ImportError:
+    from backend.event_bus.app.read_cache import (
+        invalidate_event_markets_cache,
+        invalidate_market_detail_cache,
+        invalidate_market_stats_cache,
+    )
+try:
     from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
@@ -79,6 +91,9 @@ def _update_m(cursor, db, user_id, market_id, question=None):
             (next_question, market_id),
         )
         db.commit()
+        invalidate_market_stats_cache(int(market_id))
+        invalidate_market_detail_cache(int(market_id))
+        invalidate_event_markets_cache(int(market[0]))
 
         return market_id
 

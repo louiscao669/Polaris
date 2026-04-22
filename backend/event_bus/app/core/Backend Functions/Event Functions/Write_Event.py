@@ -3,9 +3,48 @@ from typing import Any
 import pymysql
 from fail import _fail, _log_result
 try:
+    from app.read_cache import (
+        invalidate_event_markets_cache,
+        invalidate_market_detail_cache,
+        invalidate_org_events_cache,
+    )
+except ImportError:
+    from backend.event_bus.app.read_cache import (
+        invalidate_event_markets_cache,
+        invalidate_market_detail_cache,
+        invalidate_org_events_cache,
+    )
+try:
     from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
+
+
+def _invalidate_event_reads(cursor, event_id: int, organization_id: int | None = None) -> None:
+    invalidate_event_markets_cache(int(event_id))
+    if organization_id is None:
+        cursor.execute(
+            """
+            SELECT org_id
+            FROM events
+            WHERE event_id = %s
+            """,
+            (event_id,),
+        )
+        row = cursor.fetchone()
+        organization_id = row[0] if row is not None else None
+    if organization_id is not None:
+        invalidate_org_events_cache(int(organization_id))
+    cursor.execute(
+        """
+        SELECT id
+        FROM market
+        WHERE event_id = %s
+        """,
+        (event_id,),
+    )
+    for row in cursor.fetchall():
+        invalidate_market_detail_cache(int(row[0]))
 
 def create_e(data: dict[str, Any]): 
     user_id = data.get("user_id")
@@ -61,6 +100,7 @@ def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=N
                 (eid, organization_id, caption),
             )
             db.commit()
+            _invalidate_event_reads(cursor, eid, organization_id)
             return eid
 
         # Check if event with the same caption already exists in the organization
@@ -85,6 +125,7 @@ def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=N
             (organization_id, caption),
         )
         db.commit()
+        _invalidate_event_reads(cursor, cursor.lastrowid, organization_id)
 
         return cursor.lastrowid
 
@@ -196,6 +237,7 @@ def _designate_e_token(cursor, db, user_id, event_id, token_id):
             (event_id, token_id),
         )
         db.commit()
+        _invalidate_event_reads(cursor, event_id, organization_id)
 
         return True
 
@@ -297,6 +339,7 @@ def _designate_e_market_creator(cursor, db, user_id, event_id, market_creator_id
             (event_id, market_creator_id),
         )
         db.commit()
+        _invalidate_event_reads(cursor, event_id, event[0])
 
         return True
 
@@ -406,6 +449,7 @@ def _designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value):
             (event_id, constraint_id, value),
         )
         db.commit()
+        _invalidate_event_reads(cursor, event_id, event[0])
 
         return True
 
@@ -518,6 +562,7 @@ def _designate_e_open_to(cursor, db, user_id, event_id, role_id):
             (event_id, organization_id, role_id),
         )
         db.commit()
+        _invalidate_event_reads(cursor, event_id, organization_id)
 
         return True
 
@@ -602,6 +647,7 @@ def _designate_e_closed(cursor, db, user_id, event_id):
             (event_id,),
         )
         db.commit()
+        _invalidate_event_reads(cursor, event_id, event[0])
 
         return True
 

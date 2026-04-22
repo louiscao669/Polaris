@@ -3,6 +3,10 @@ from typing import Any
 import pymysql
 from fail import _fail, _log_result
 try:
+    from app.read_cache import invalidate_user_metadata_cache
+except ImportError:
+    from backend.event_bus.app.read_cache import invalidate_user_metadata_cache
+try:
     from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
@@ -447,6 +451,7 @@ def _create_user_in_role(cursor, db, user_id, organization_id, target_user_id, r
             (organization_id, role_id, target_user_id),
         )
         db.commit()
+        invalidate_user_metadata_cache(int(target_user_id))
 
         return True
 

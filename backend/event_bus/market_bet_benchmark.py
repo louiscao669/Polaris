@@ -95,9 +95,11 @@ def submit_transaction(
     headers: dict[str, str],
     transaction_id: int,
 ) -> AcceptedOperation:
+    market_count = max(1, int(getattr(args, "market_count", 1)))
+    market_id = args.market_id + (index % market_count)
     payload = {
         "user_id": args.user_id,
-        "market_id": args.market_id,
+        "market_id": market_id,
         "action": "MARKET_TRANSACTION",
         "token_id": args.token_id,
         "side": args.side,
@@ -235,6 +237,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--token-id", type=int, required=True)
     parser.add_argument("--requests", type=int, default=2000)
     parser.add_argument("--concurrency", type=int, default=10)
+    parser.add_argument(
+        "--market-count",
+        type=int,
+        default=1,
+        help="How many consecutive market ids to round-robin across, starting at --market-id.",
+    )
     parser.add_argument("--qty", type=int, default=1.0)
     parser.add_argument("--side", type=int, choices=(0, 1), default=1)
     parser.add_argument(
@@ -265,6 +273,14 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Optional output CSV path for sweep results.",
     )
+    parser.add_argument(
+        "--market-count-sweep",
+        default="",
+        help=(
+            "Comma-separated market-count values to run back-to-back, "
+            'e.g. "1,10,20,30,40,50,60,70,80,90,100".'
+        ),
+    )
     return parser.parse_args()
 
 
@@ -280,6 +296,7 @@ def run_once(args: argparse.Namespace, headers: dict[str, str], *, verbose: bool
                     "token_id": args.token_id,
                     "requests": args.requests,
                     "concurrency": args.concurrency,
+                    "market_count": args.market_count,
                     "qty": args.qty,
                     "side": args.side,
                     "transaction_type": args.transaction_type,
@@ -325,7 +342,7 @@ def run_once(args: argparse.Namespace, headers: dict[str, str], *, verbose: bool
     return succeeded, failed, submit_seconds, total_seconds
 
 
-def parse_concurrency_sweep(raw: str) -> list[int]:
+def parse_positive_int_sweep(raw: str, *, label: str) -> list[int]:
     if not raw.strip():
         return []
     values: list[int] = []
@@ -335,21 +352,13 @@ def parse_concurrency_sweep(raw: str) -> list[int]:
             continue
         v = int(p)
         if v <= 0:
-            raise ValueError("concurrency sweep values must be > 0")
+            raise ValueError(f"{label} sweep values must be > 0")
         values.append(v)
     return values
 
 
 def write_sweep_csv(path: str, rows: list[dict[str, float | int]]) -> None:
-    fieldnames = [
-        "users",
-        "succeeded",
-        "failed",
-        "submit_rps",
-        "completion_ops_s",
-        "submit_s",
-        "total_s",
-    ]
+    fieldnames = list(rows[0].keys()) if rows else []
     with open(path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -360,27 +369,43 @@ def write_sweep_csv(path: str, rows: list[dict[str, float | int]]) -> None:
 def main() -> int:
     args = parse_args()
     headers = build_headers(args)
-    sweep_values = parse_concurrency_sweep(args.concurrency_sweep)
-    if not sweep_values:
+    concurrency_sweep = parse_positive_int_sweep(
+        args.concurrency_sweep, label="concurrency"
+    )
+    market_count_sweep = parse_positive_int_sweep(
+        args.market_count_sweep, label="market-count"
+    )
+    if concurrency_sweep and market_count_sweep:
+        raise ValueError(
+            "Use either --concurrency-sweep or --market-count-sweep, not both together."
+        )
+
+    if not concurrency_sweep and not market_count_sweep:
         succeeded, failed, _submit_seconds, _total_seconds = run_once(
             args, headers, verbose=True
         )
         return 1 if failed else 0
 
+    sweep_values = concurrency_sweep or market_count_sweep
+    sweep_label = "users" if concurrency_sweep else "markets"
+
     print("Starting market betting benchmark sweep")
-    print(f"concurrency_values: {sweep_values}")
+    print(f"{sweep_label}_values: {sweep_values}")
     print(f"requests_per_run: {args.requests}")
     print()
     print(
-        "users  succeeded  failed  submit_rps  completion_ops_s  "
+        f"{sweep_label:<7}  succeeded  failed  submit_rps  completion_ops_s  "
         "submit_s  total_s"
     )
     print("-" * 78)
     any_failed = False
     csv_rows: list[dict[str, float | int]] = []
-    for i, users in enumerate(sweep_values):
+    for i, sweep_value in enumerate(sweep_values):
         run_args = argparse.Namespace(**vars(args))
-        run_args.concurrency = users
+        if concurrency_sweep:
+            run_args.concurrency = sweep_value
+        else:
+            run_args.market_count = sweep_value
         # keep transaction_id unique across sweep runs
         run_args.transaction_id_start = args.transaction_id_start + (i * args.requests)
         succeeded, failed, submit_seconds, total_seconds = run_once(
@@ -391,13 +416,13 @@ def main() -> int:
             (args.requests / total_seconds) if total_seconds > 0 else 0.0
         )
         print(
-            f"{users:>5}  {succeeded:>9}  {failed:>6}  "
+            f"{sweep_value:>7}  {succeeded:>9}  {failed:>6}  "
             f"{submit_rps:>10.2f}  {completion_ops_s:>16.2f}  "
             f"{submit_seconds:>8.3f}  {total_seconds:>7.3f}"
         )
         csv_rows.append(
             {
-                "users": users,
+                sweep_label: sweep_value,
                 "succeeded": succeeded,
                 "failed": failed,
                 "submit_rps": round(submit_rps, 4),

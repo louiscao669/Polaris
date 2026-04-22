@@ -4,9 +4,39 @@ import pymysql, datetime
 from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
 from fail import _fail, _log_result
 try:
+    from app.read_cache import (
+        invalidate_event_markets_cache,
+        invalidate_market_detail_cache,
+        invalidate_market_stats_cache,
+    )
+except ImportError:
+    from backend.event_bus.app.read_cache import (
+        invalidate_event_markets_cache,
+        invalidate_market_detail_cache,
+        invalidate_market_stats_cache,
+    )
+try:
     from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
+
+
+def _invalidate_market_reads(cursor, market_id: int, event_id: int | None = None) -> None:
+    invalidate_market_stats_cache(int(market_id))
+    invalidate_market_detail_cache(int(market_id))
+    if event_id is None:
+        cursor.execute(
+            """
+            SELECT event_id
+            FROM market
+            WHERE id = %s
+            """,
+            (market_id,),
+        )
+        row = cursor.fetchone()
+        event_id = row[0] if row is not None else None
+    if event_id is not None:
+        invalidate_event_markets_cache(int(event_id))
 
 def create_m(data: dict[str, Any]): 
     user_id = data.get("user_id")
@@ -79,6 +109,7 @@ def _create_m(cursor, db, user_id, event_id, question, description, explicit_mar
                 (mid, event_id, question, user_id),
             )
             db.commit()
+            _invalidate_market_reads(cursor, mid, event_id)
             return mid
         
         # Check if any markets with the same question already exist in the event
@@ -106,6 +137,7 @@ def _create_m(cursor, db, user_id, event_id, question, description, explicit_mar
         )
 
         db.commit()
+        _invalidate_market_reads(cursor, cursor.lastrowid, event_id)
 
         return cursor.lastrowid
 
@@ -202,6 +234,7 @@ def _designate_m_token(cursor, db, user_id, market_id, token_id):
         )
 
         db.commit()
+        _invalidate_market_reads(cursor, market_id)
 
         return True
 
@@ -370,6 +403,7 @@ def _designate_m_result(cursor, db, user_id, market_id, result):
                 return payout_result
 
         db.commit()
+        _invalidate_market_reads(cursor, market_id)
 
         return True
 
@@ -473,6 +507,7 @@ def _designate_m_contraint(cursor, db, user_id, market_id, constraint_id, value)
         )
 
         db.commit()
+        _invalidate_market_reads(cursor, market_id)
 
         return True
 
@@ -616,6 +651,7 @@ def _designate_m_open_to_as(cursor, db, user_id, market_id, role_id, as_id):
         )
 
         db.commit()
+        _invalidate_market_reads(cursor, market_id)
         
         return True
 
@@ -844,6 +880,7 @@ def _do_m_transaction(cursor, db, user_id, market_id, token_id, side, qty, trans
             )
 
         db.commit()
+        invalidate_market_stats_cache(int(market_id))
         
         return transaction_id
 
@@ -1011,6 +1048,7 @@ def _do_m_payout(cursor, db, user_id, market_id, token_id):
             )
 
         db.commit()
+        invalidate_market_stats_cache(int(market_id))
 
         return True
 

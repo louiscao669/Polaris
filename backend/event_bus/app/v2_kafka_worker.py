@@ -4,24 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import traceback
-from typing import Any
-from uuid import UUID
-
-from aiokafka import AIOKafkaConsumer
-
-from .core.kafka_dispatch import dispatch_v2_consolidated
-from .kafka_aiokafka_common import aiokafka_common_kwargs
-from .operations_repo import update_operation_status
-from .processed_events_repo import classify_message, mark_applied, mark_failed
-from .topics import dlq_for
-from .v2_kafka_client import v2_kafka_producer
-
-from __future__ import annotations
-import asyncio
-import json
-import traceback
 import ssl
+import traceback
 from typing import Any
 from uuid import UUID
 
@@ -29,7 +13,12 @@ from aiokafka import AIOKafkaConsumer
 from aiokafka.abc import AbstractTokenProvider
 from aws_msk_iam_sasl_signer import MSKAuthTokenProvider
 
+from .core.kafka_dispatch import dispatch_v2_consolidated
 from .kafka_aiokafka_common import aiokafka_common_kwargs
+from .operations_repo import update_operation_status
+from .processed_events_repo import classify_message, mark_applied, mark_failed
+from .topics import dlq_for
+from .v2_kafka_client import v2_kafka_producer
 
 async def send_to_dlq(
     source_topic: str,
@@ -106,9 +95,12 @@ async def process_kafka_message(msg: Any, consumer_group: str) -> None:
 class MSKTokenProvider(AbstractTokenProvider):
     def __init__(self, region: str = "us-east-2"):
         self.region = region
+
     async def token(self):
         token, _ = MSKAuthTokenProvider.generate_auth_token(self.region)
         return token
+
+
 class PolarisV2Worker:
     def __init__(self, topics: list[str], group_id: str) -> None:
         self.topics = topics
@@ -117,23 +109,24 @@ class PolarisV2Worker:
 
     async def run_forever(self) -> None:
         kwargs = aiokafka_common_kwargs()
-        kwargs.update({
-            "group_id": self.group_id,
-            "security_protocol": "SASL_SSL",
-            "sasl_mechanism": "OAUTHBEARER",
-            "sasl_oauth_token_provider": MSKTokenProvider(),
-            "ssl_context": ssl.create_default_context(),
-            "value_deserializer": lambda m: json.loads(m.decode()),
-        })
-        
+        kwargs.update(
+            {
+                "group_id": self.group_id,
+                "security_protocol": "SASL_SSL",
+                "sasl_mechanism": "OAUTHBEARER",
+                "sasl_oauth_token_provider": MSKTokenProvider(),
+                "ssl_context": ssl.create_default_context(),
+                "value_deserializer": lambda m: json.loads(m.decode()),
+            }
+        )
+
         self.consumer = AIOKafkaConsumer(**kwargs)
         print(f"📡 Worker connecting to MSK...")
         await self.consumer.start()
         self.consumer.subscribe(self.topics)
-        
+
         try:
             async for msg in self.consumer:
-                # This is the line that was failing:
                 await process_kafka_message(msg, self.group_id)
         finally:
             if self.consumer:

@@ -4,9 +4,32 @@ import pymysql, datetime
 from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
 from fail import _fail, _log_result
 try:
+    from app.read_cache import (
+        event_markets_key,
+        market_detail_key,
+        market_read_cache,
+        market_stats_key,
+        metadata_read_cache,
+    )
+except ImportError:
+    from backend.event_bus.app.read_cache import (
+        event_markets_key,
+        market_detail_key,
+        market_read_cache,
+        market_stats_key,
+        metadata_read_cache,
+    )
+try:
     from app.database import get_connection
 except ImportError:
     from backend.event_bus.app.database import get_connection
+
+
+def _cache_success(key: str, value: Any, ttl_seconds: float) -> Any:
+    if isinstance(value, dict) and value.get("ok") is False:
+        return value
+    market_read_cache.set(key, value, ttl_seconds)
+    return value
 
 def stats_m_liquidity(data: dict[str, Any]): 
     user_id = data.get("user_id")
@@ -22,9 +45,20 @@ def stats_m_liquidity(data: dict[str, Any]):
         _log_result("stats_m_liquidity", result)
         return result
 
+    cache_key = market_stats_key(
+        market_id=int(market_id),
+        user_id=int(user_id),
+        stat_name="liquidity",
+    )
+    cached = market_read_cache.get(cache_key)
+    if cached is not None:
+        _log_result("stats_m_liquidity", cached)
+        return cached
+
     with get_connection() as db:
         cursor = db.cursor()
         result = _stats_m_liquidity(cursor, db, user_id, market_id)
+    result = _cache_success(cache_key, result, 3.0)
     _log_result("stats_m_liquidity", result)
     return result
 
@@ -398,9 +432,20 @@ def stats_m_trade_distribution(data: dict[str, Any]):
         _log_result("stats_m_trade_distribution", result)
         return result
 
+    cache_key = market_stats_key(
+        market_id=int(market_id),
+        user_id=int(user_id),
+        stat_name="trade_distribution",
+    )
+    cached = market_read_cache.get(cache_key)
+    if cached is not None:
+        _log_result("stats_m_trade_distribution", cached)
+        return cached
+
     with get_connection() as db:
         cursor = db.cursor()
         result = _stats_m_trade_distribution(cursor, db, user_id, market_id)
+    result = _cache_success(cache_key, result, 5.0)
     _log_result("stats_m_trade_distribution", result)
     return result
 
@@ -478,9 +523,21 @@ def stats_m_window_comparison(data: dict[str, Any]):
         _log_result("stats_m_window_comparison", result)
         return result
 
+    cache_key = market_stats_key(
+        market_id=int(market_id),
+        user_id=int(user_id),
+        stat_name="window_comparison",
+        extra=str(hours),
+    )
+    cached = market_read_cache.get(cache_key)
+    if cached is not None:
+        _log_result("stats_m_window_comparison", cached)
+        return cached
+
     with get_connection() as db:
         cursor = db.cursor()
         result = _stats_m_window_comparison(cursor, db, user_id, market_id, hours)
+    result = _cache_success(cache_key, result, 5.0)
     _log_result("stats_m_window_comparison", result)
     return result
 
@@ -557,9 +614,20 @@ def read_e_markets(data: dict[str, Any]):
         _log_result("read_e_markets", result)
         return result
 
+    cache_key = event_markets_key(
+        event_id=int(event_id),
+        user_id=int(user_id),
+    )
+    cached = metadata_read_cache.get(cache_key)
+    if cached is not None:
+        _log_result("read_e_markets", cached)
+        return cached
+
     with get_connection() as db:
         cursor = db.cursor()
         result = _read_e_markets(cursor, db, user_id, event_id)
+    if not (isinstance(result, dict) and result.get("ok") is False):
+        metadata_read_cache.set(cache_key, result)
     _log_result("read_e_markets", result)
     return result
 
@@ -677,9 +745,20 @@ def read_m(data: dict[str, Any]):
         _log_result("read_m", result)
         return result
 
+    cache_key = market_detail_key(
+        market_id=int(market_id),
+        user_id=int(user_id),
+    )
+    cached = metadata_read_cache.get(cache_key)
+    if cached is not None:
+        _log_result("read_m", cached)
+        return cached
+
     with get_connection() as db:
         cursor = db.cursor()
         result = _read_m(cursor, db, user_id, market_id)
+    if not (isinstance(result, dict) and result.get("ok") is False):
+        metadata_read_cache.set(cache_key, result)
     _log_result("read_m", result)
     return result
 
