@@ -71,9 +71,11 @@ def submit_transaction(
     args: argparse.Namespace,
     transaction_id: int,
 ) -> RequestResult:
+    market_count = max(1, int(getattr(args, "market_count", 1)))
+    market_id = args.market_id + (index % market_count)
     payload = {
         "user_id": args.user_id,
-        "market_id": args.market_id,
+        "market_id": market_id,
         "token_id": args.token_id,
         "side": bool(args.side),
         "qty": int(args.qty),
@@ -144,6 +146,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--user-id", type=int, required=True)
     parser.add_argument("--market-id", type=int, required=True)
+    parser.add_argument(
+        "--market-count",
+        type=int,
+        default=1,
+        help="How many consecutive market ids to round-robin across, starting at --market-id.",
+    )
     parser.add_argument("--token-id", type=int, required=True)
     parser.add_argument("--requests", type=int, default=1000)
     parser.add_argument("--concurrency", type=int, default=10)
@@ -206,6 +214,7 @@ def run_once(args: argparse.Namespace, *, verbose: bool) -> tuple[int, int, floa
                     "base_url": args.base_url,
                     "user_id": args.user_id,
                     "market_id": args.market_id,
+                    "market_count": args.market_count,
                     "token_id": args.token_id,
                     "requests": args.requests,
                     "concurrency": args.concurrency,

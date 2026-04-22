@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 import pymysql, datetime
 from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
@@ -21,7 +21,7 @@ except ImportError:
     from backend.event_bus.app.database import get_connection
 
 
-def _invalidate_market_reads(cursor, market_id: int, event_id: int | None = None) -> None:
+def _invalidate_market_reads(cursor, market_id: int, event_id: Optional[int] = None) -> None:
     invalidate_market_stats_cache(int(market_id))
     invalidate_market_detail_cache(int(market_id))
     if event_id is None:

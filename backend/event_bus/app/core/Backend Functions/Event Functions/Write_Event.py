@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 import pymysql
 from fail import _fail, _log_result
@@ -20,7 +20,7 @@ except ImportError:
     from backend.event_bus.app.database import get_connection
 
 
-def _invalidate_event_reads(cursor, event_id: int, organization_id: int | None = None) -> None:
+def _invalidate_event_reads(cursor, event_id: int, organization_id: Optional[int] = None) -> None:
     invalidate_event_markets_cache(int(event_id))
     if organization_id is None:
         cursor.execute(

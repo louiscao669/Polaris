@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 import mysql.connector
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -540,7 +540,7 @@ class SignupBody(BaseModel):
     email: str
     username: str
     password: str
-    age: int | None = None
+    age: Optional[int] = None
 
 class LoginBody(BaseModel):
     email: str  # Sign-in form uses this field for the user's email (resolved to username server-side)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 
 def list_user_organizations(cursor, db, user_id: int) -> list[dict[str, Any]]:
@@ -289,7 +289,7 @@ def get_token_description(cursor, db, org_id: int, token_id: int) -> str:
         return "No description available"
     return row[0] or "No description available"
 
-def get_tokens_quantity(cursor, db, token_id: int, org_id: int, user_id: int | None = None) -> int:
+def get_tokens_quantity(cursor, db, token_id: int, org_id: int, user_id: Optional[int] = None) -> int:
     del db
     if user_id is None:
         cursor.execute(
