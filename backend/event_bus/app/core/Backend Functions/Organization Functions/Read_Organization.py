@@ -58,9 +58,11 @@ def _read_user_organizations(cursor, db, user_id):
         return [
             {
                 "organization_id": row[0],
+                "org_id": row[0],
                 "name": row[1],
                 "description": row[2],
                 "is_leader": bool(row[3]),
+                "membership": "leader" if row[3] else "member",
                 "role_id": row[4],
             }
             for row in cursor.fetchall()

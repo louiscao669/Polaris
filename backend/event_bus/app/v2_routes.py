@@ -109,6 +109,51 @@ async def v2_market_transaction(
     )
 
 
+@router.post("/markets/lifecycle")
+async def v2_market_lifecycle(
+    payload: dict[str, Any],
+    claims: Annotated[dict[str, Any], Depends(bearer_claims_required_for_writes)],
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> Response:
+    body = _merge_payload(payload, claims, x_user_id)
+    env = build_envelope(
+        domain="market.operations",
+        payload=body,
+        jwt_claims=claims if claims else None,
+    )
+    oid = env.metadata.event_id
+    envelope_dict = env.model_dump(mode="json")
+
+    market_key_source = (
+        body.get("market_id")
+        or body.get("marketId")
+        or body.get("event_id")
+        or body.get("eventId")
+    )
+    key = str(market_key_source).encode("utf-8") if market_key_source is not None else None
+
+    part, off = await v2_kafka_producer.send_json(
+        topic=MARKET_OPERATIONS, value=envelope_dict, key=key
+    )
+    insert_operation_pending(
+        operation_id=oid, topic=MARKET_OPERATIONS, envelope=envelope_dict
+    )
+    update_operation_kafka_meta(operation_id=oid, partition=part, offset=off)
+
+    out = {
+        "accepted": True,
+        "operation_id": str(oid),
+        "status": "queued",
+        "received_at": env.metadata.timestamp,
+        "estimated_completion": _estimate_completion(),
+    }
+    return Response(
+        content=json.dumps(out),
+        media_type="application/json",
+        status_code=202,
+    )
+
+
 @router.post("/org/management")
 async def v2_org_management(
     payload: dict[str, Any],
