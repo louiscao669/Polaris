@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 
 from .auth.jwt_deps import (
+    bearer_claims_optional,
     bearer_claims_required_for_operations_read,
     bearer_claims_required_for_writes,
 )
@@ -48,6 +49,24 @@ def _merge_payload(
     if not V2_REQUIRE_JWT and x_user_id and "user_id" not in body:
         body = {**body, "user_id": x_user_id}
     return body
+
+
+PUBLIC_USER_ACCOUNT_ACTIONS = frozenset({"USER_SIGNUP", "USER_LOGIN"})
+
+
+def _claims_for_user_account_action(
+    payload: dict[str, Any],
+    claims: dict[str, Any] | None,
+) -> dict[str, Any]:
+    action = str(payload.get("action") or "").strip().upper()
+    if action in PUBLIC_USER_ACCOUNT_ACTIONS:
+        return claims or {}
+    if claims:
+        return claims
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="missing bearer token",
+    )
 
 
 @router.post("/markets/transactions")
@@ -173,14 +192,15 @@ async def v2_event_lifecycle(
 @router.post("/user/account")
 async def v2_user_account(
     payload: dict[str, Any],
-    claims: Annotated[dict[str, Any], Depends(bearer_claims_required_for_writes)],
+    claims: Annotated[dict[str, Any] | None, Depends(bearer_claims_optional)],
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> Response:
-    body = _merge_payload(payload, claims, x_user_id)
+    effective_claims = _claims_for_user_account_action(payload, claims)
+    body = _merge_payload(payload, effective_claims, x_user_id)
     env = build_envelope(
         domain="user.account",
         payload=body,
-        jwt_claims=claims if claims else None,
+        jwt_claims=effective_claims if effective_claims else None,
     )
     oid = env.metadata.event_id
     envelope_dict = env.model_dump(mode="json")
