@@ -1,6 +1,7 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import './MarketPage.css';
+import ActionDialog from './ActionDialog';
 import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
@@ -35,6 +36,9 @@ export default function MarketPage() {
   const [analyticsError, setAnalyticsError] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [adminError, setAdminError] = useState(null);
+  const [organizationData, setOrganizationData] = useState(null);
+  const [showAddTokenDialog, setShowAddTokenDialog] = useState(false);
+  const [marketTokenId, setMarketTokenId] = useState('');
   const [tradeForm, setTradeForm] = useState({
     transactionType: 'BUY',
     side: 'YES',
@@ -50,6 +54,23 @@ export default function MarketPage() {
   const allowedTokenIds = useMemo(
     () => (Array.isArray(market?.tokens_allowed) ? market.tokens_allowed : []),
     [market]
+  );
+  const organizationTokens = Array.isArray(organizationData?.tokens) ? organizationData.tokens : [];
+  const organizationMembers = Array.isArray(organizationData?.members) ? organizationData.members : [];
+  const tokenNameById = useMemo(
+    () => Object.fromEntries(organizationTokens.map((token) => [String(token.token_id), token.name])),
+    [organizationTokens]
+  );
+  const memberNameById = useMemo(
+    () =>
+      Object.fromEntries(
+        organizationMembers.map((member) => {
+          const fullName = [member?.first, member?.last].filter(Boolean).join(' ').trim();
+          const label = fullName || member?.username || `User #${member?.user_id ?? ''}`;
+          return [String(member.user_id), label];
+        })
+      ),
+    [organizationMembers]
   );
 
   useEffect(() => {
@@ -113,6 +134,33 @@ export default function MarketPage() {
       cancelled = true;
     };
   }, [marketId, userId]);
+
+  useEffect(() => {
+    if (!market?.organization_id || !userId) {
+      setOrganizationData(null);
+      return;
+    }
+    let cancelled = false;
+    const loadOrganization = async () => {
+      try {
+        const data = await readJson(
+          `/organizations/${market.organization_id}?user_id=${encodeURIComponent(userId)}`
+        );
+        if (!cancelled) {
+          setOrganizationData(data);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setOrganizationData(null);
+        }
+      }
+    };
+    loadOrganization();
+    return () => {
+      cancelled = true;
+    };
+  }, [market?.organization_id, userId]);
 
   useEffect(() => {
     if (!showAnalytics || !canViewAnalytics || !userId || !marketId) {
@@ -241,15 +289,21 @@ export default function MarketPage() {
   };
 
   const handleAddMarketToken = async () => {
-    const tokenId = window.prompt('Organization token id to allow in this market');
-    if (!tokenId || !canManageMarket) return;
+    if (!canManageMarket) return;
+    setMarketTokenId(String(organizationTokens[0]?.token_id || ''));
+    setShowAddTokenDialog(true);
+  };
+
+  const submitAddMarketToken = async () => {
+    if (!marketTokenId || !canManageMarket) return;
     setAdminError(null);
     try {
       await postJson('/markets/designate-token', {
         user_id: Number(userId),
         market_id: Number(marketId),
-        token_id: Number(tokenId),
+        token_id: Number(marketTokenId),
       });
+      setShowAddTokenDialog(false);
       await refreshAfterTrade();
     } catch (error) {
       console.error(error);
@@ -353,7 +407,9 @@ export default function MarketPage() {
           <h1>{marketLoading ? 'Loading market...' : market?.question || 'Market not found'}</h1>
           <p>
             {market
-              ? `Event #${market.event_id} · ${market.is_open ? 'Open' : 'Closed'} · Created by ${market.created_by}`
+              ? `Event #${market.event_id} · ${market.is_open ? 'Open' : 'Closed'} · Created by ${
+                  memberNameById[String(market.created_by)] || `User #${market.created_by}`
+                }`
               : 'Open a market from the event page to trade and review analytics.'}
           </p>
           {marketError && <p className="market-error">{marketError}</p>}
@@ -364,7 +420,12 @@ export default function MarketPage() {
             <h2>Market State</h2>
             <ul className="market-list">
               <li>Organization: {market?.organization_id ?? '-'}</li>
-              <li>Allowed tokens: {allowedTokenIds.length ? allowedTokenIds.join(', ') : 'None'}</li>
+              <li>
+                Allowed tokens:{' '}
+                {allowedTokenIds.length
+                  ? allowedTokenIds.map((tokenId) => tokenNameById[String(tokenId)] || `Token #${tokenId}`).join(', ')
+                  : 'None'}
+              </li>
               <li>Access role: {market?.role_id || 'viewer'}</li>
               <li>Created: {market?.created_at ? new Date(market.created_at).toLocaleString() : 'Unknown'}</li>
               <li>Close at: {market?.close_at ? new Date(market.close_at).toLocaleString() : 'Not scheduled'}</li>
@@ -415,7 +476,7 @@ export default function MarketPage() {
                   <select value={tradeForm.tokenId} onChange={handleTradeChange('tokenId')}>
                     {allowedTokenIds.map((tokenId) => (
                       <option key={tokenId} value={String(tokenId)}>
-                        Token #{tokenId}
+                        {tokenNameById[String(tokenId)] || `Token #${tokenId}`}
                       </option>
                     ))}
                   </select>
@@ -483,6 +544,30 @@ export default function MarketPage() {
           </section>
         )}
       </div>
+      {showAddTokenDialog && (
+        <ActionDialog
+          title="Add Market Token"
+          description="Choose the token by name and Polaris will send the right token id."
+          onClose={() => setShowAddTokenDialog(false)}
+          onSubmit={submitAddMarketToken}
+          submitLabel="Add Token"
+          submitDisabled={!marketTokenId}
+        >
+          <label>
+            Token
+            <select value={marketTokenId} onChange={(event) => setMarketTokenId(event.target.value)}>
+              <option value="" disabled>
+                Select a token
+              </option>
+              {organizationTokens.map((token) => (
+                <option key={token.token_id} value={String(token.token_id)}>
+                  {token.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </ActionDialog>
+      )}
     </section>
   );
 }

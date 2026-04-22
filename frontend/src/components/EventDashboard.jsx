@@ -1,6 +1,7 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import './EventDashboard.css';
+import ActionDialog from './ActionDialog';
 import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
@@ -23,6 +24,14 @@ const analyzerView = [
   'Export event and trading metrics for reports',
 ];
 
+function formatMemberLabel(member) {
+  const fullName = [member?.first, member?.last].filter(Boolean).join(' ').trim();
+  if (fullName && member?.username) return `${fullName} (@${member.username})`;
+  if (fullName) return fullName;
+  if (member?.username) return `@${member.username}`;
+  return `User #${member?.user_id ?? ''}`;
+}
+
 export default function EventDashboard() {
   const { organizationId, eventId } = useParams();
   const [searchParams] = useSearchParams();
@@ -38,6 +47,11 @@ export default function EventDashboard() {
   const [marketAnalytics, setMarketAnalytics] = useState([]);
   const [marketActionError, setMarketActionError] = useState(null);
   const [adminError, setAdminError] = useState(null);
+  const [organizationData, setOrganizationData] = useState(null);
+  const [showAddTokenDialog, setShowAddTokenDialog] = useState(false);
+  const [showAddCreatorDialog, setShowAddCreatorDialog] = useState(false);
+  const [eventTokenId, setEventTokenId] = useState('');
+  const [marketCreatorId, setMarketCreatorId] = useState('');
 
   const loadEvent = async () => {
     if (!eventId || !userId) return;
@@ -70,6 +84,33 @@ export default function EventDashboard() {
   useEffect(() => {
     loadEvent();
   }, [eventId, userId]);
+
+  useEffect(() => {
+    if (!organizationId || !userId) {
+      setOrganizationData(null);
+      return;
+    }
+    let cancelled = false;
+    const loadOrganization = async () => {
+      try {
+        const data = await readJson(
+          `/organizations/${organizationId}?user_id=${encodeURIComponent(userId)}`
+        );
+        if (!cancelled) {
+          setOrganizationData(data);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setOrganizationData(null);
+        }
+      }
+    };
+    loadOrganization();
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId, userId]);
 
   useEffect(() => {
     loadMarkets();
@@ -183,6 +224,11 @@ export default function EventDashboard() {
   const tokensAllowed = Array.isArray(eventData?.tokens_allowed) ? eventData.tokens_allowed : [];
   const canCreateMarket = roleView === 'analyzer' && !!eventId && !!userId;
   const canManageEvent = !!eventData?.is_leader && !!eventId && !!userId;
+  const organizationTokens = Array.isArray(organizationData?.tokens) ? organizationData.tokens : [];
+  const organizationMembers = Array.isArray(organizationData?.members) ? organizationData.members : [];
+  const tokenNameById = Object.fromEntries(
+    organizationTokens.map((token) => [String(token.token_id), token.name])
+  );
 
   const handleCreateMarket = async () => {
     const question = window.prompt('Enter the market question');
@@ -250,15 +296,21 @@ export default function EventDashboard() {
   };
 
   const handleAddEventToken = async () => {
-    const tokenId = window.prompt('Organization token id to allow in this event');
-    if (!tokenId || !canManageEvent) return;
+    if (!canManageEvent) return;
+    setEventTokenId(String(organizationTokens[0]?.token_id || ''));
+    setShowAddTokenDialog(true);
+  };
+
+  const submitAddEventToken = async () => {
+    if (!eventTokenId || !canManageEvent) return;
     setAdminError(null);
     try {
       await postJson('/events/designate-token', {
         user_id: Number(userId),
         event_id: Number(eventId),
-        token_id: Number(tokenId),
+        token_id: Number(eventTokenId),
       });
+      setShowAddTokenDialog(false);
       await loadEvent();
     } catch (error) {
       console.error(error);
@@ -267,15 +319,21 @@ export default function EventDashboard() {
   };
 
   const handleAddMarketCreator = async () => {
-    const creatorId = window.prompt('User id to authorize as market creator');
-    if (!creatorId || !canManageEvent) return;
+    if (!canManageEvent) return;
+    setMarketCreatorId(String(organizationMembers[0]?.user_id || ''));
+    setShowAddCreatorDialog(true);
+  };
+
+  const submitAddMarketCreator = async () => {
+    if (!marketCreatorId || !canManageEvent) return;
     setAdminError(null);
     try {
       await postJson('/events/designate-market-creator', {
         user_id: Number(userId),
         event_id: Number(eventId),
-        market_creator_id: Number(creatorId),
+        market_creator_id: Number(marketCreatorId),
       });
+      setShowAddCreatorDialog(false);
       await loadEvent();
     } catch (error) {
       console.error(error);
@@ -402,7 +460,7 @@ export default function EventDashboard() {
                 {tokensAllowed.map((tokenId) => (
                   <li key={tokenId}>
                     <div>
-                      <strong>Token #{tokenId}</strong>
+                      <strong>{tokenNameById[String(tokenId)] || `Token #${tokenId}`}</strong>
                       <p>Allowed for this event.</p>
                     </div>
                     <span>Enabled</span>
@@ -450,6 +508,54 @@ export default function EventDashboard() {
           )}
         </section>
       </div>
+      {showAddTokenDialog && (
+        <ActionDialog
+          title="Add Event Token"
+          description="Choose a token by name instead of typing the token id."
+          onClose={() => setShowAddTokenDialog(false)}
+          onSubmit={submitAddEventToken}
+          submitLabel="Add Token"
+          submitDisabled={!eventTokenId}
+        >
+          <label>
+            Token
+            <select value={eventTokenId} onChange={(event) => setEventTokenId(event.target.value)}>
+              <option value="" disabled>
+                Select a token
+              </option>
+              {organizationTokens.map((token) => (
+                <option key={token.token_id} value={String(token.token_id)}>
+                  {token.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </ActionDialog>
+      )}
+      {showAddCreatorDialog && (
+        <ActionDialog
+          title="Add Market Creator"
+          description="Choose the authorized user by name. Polaris will use the underlying user id."
+          onClose={() => setShowAddCreatorDialog(false)}
+          onSubmit={submitAddMarketCreator}
+          submitLabel="Add Creator"
+          submitDisabled={!marketCreatorId}
+        >
+          <label>
+            User
+            <select value={marketCreatorId} onChange={(event) => setMarketCreatorId(event.target.value)}>
+              <option value="" disabled>
+                Select a member
+              </option>
+              {organizationMembers.map((member) => (
+                <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
+                  {formatMemberLabel(member)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </ActionDialog>
+      )}
     </section>
   );
 }

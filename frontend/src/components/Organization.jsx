@@ -3,8 +3,17 @@ import { Link, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import OrganizationMembership from './OrganizationMembership';
+import ActionDialog from './ActionDialog';
 import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
+
+function formatMemberLabel(member) {
+  const fullName = [member?.first, member?.last].filter(Boolean).join(' ').trim();
+  if (fullName && member?.username) return `${fullName} (@${member.username})`;
+  if (fullName) return fullName;
+  if (member?.username) return `@${member.username}`;
+  return `User #${member?.user_id ?? ''}`;
+}
 
 function Organization() { 
   const { organizationId } = useParams();
@@ -24,6 +33,10 @@ function Organization() {
   const [numEventsLoading, setNumEventsLoading] = useState(false);
   const [numMarketsLoading, setNumMarketsLoading] = useState(false);
   const [adminError, setAdminError] = useState(null);
+  const [assignRoleForm, setAssignRoleForm] = useState({ targetUserId: '', roleId: '' });
+  const [grantTokensForm, setGrantTokensForm] = useState({ targetUserId: '', tokenId: '', qty: '1' });
+  const [showAssignRoleDialog, setShowAssignRoleDialog] = useState(false);
+  const [showGrantTokensDialog, setShowGrantTokensDialog] = useState(false);
 
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId') || getStoredUserId();
@@ -120,6 +133,9 @@ function Organization() {
   ];
 
   const canManageOrganization = !!orgData?.is_leader && !!userId && normalizedOrganizationId != null;
+  const availableMembers = Array.isArray(orgData?.members) ? orgData.members : [];
+  const availableRoles = Array.isArray(orgData?.roles) ? orgData.roles : [];
+  const availableTokens = Array.isArray(orgData?.tokens) ? orgData.tokens : [];
 
   const refreshOrganization = async () => {
     await Promise.all([loadOrganization(), loadOrganizationEvents()]);
@@ -205,17 +221,25 @@ function Organization() {
   };
 
   const handleAssignRole = async () => {
-    const targetUserId = window.prompt('User id to assign');
-    const roleId = window.prompt('Role id to assign');
-    if (!targetUserId || !roleId || !canManageOrganization) return;
+    if (!canManageOrganization) return;
+    setAssignRoleForm({
+      targetUserId: String(availableMembers[0]?.user_id || ''),
+      roleId: availableRoles[0]?.role_id || '',
+    });
+    setShowAssignRoleDialog(true);
+  };
+
+  const submitAssignRole = async () => {
+    if (!assignRoleForm.targetUserId || !assignRoleForm.roleId || !canManageOrganization) return;
     setAdminError(null);
     try {
       await postJson('/organization-members', {
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
-        target_user_id: Number(targetUserId),
-        role_id: roleId,
+        target_user_id: Number(assignRoleForm.targetUserId),
+        role_id: assignRoleForm.roleId,
       });
+      setShowAssignRoleDialog(false);
       await loadOrganization();
     } catch (error) {
       console.error(error);
@@ -224,19 +248,34 @@ function Organization() {
   };
 
   const handleGrantTokens = async () => {
-    const targetUserId = window.prompt('User id to receive tokens');
-    const tokenId = window.prompt('Organization token id');
-    const qty = window.prompt('Quantity of tokens to grant');
-    if (!targetUserId || !tokenId || !qty || !canManageOrganization) return;
+    if (!canManageOrganization) return;
+    setGrantTokensForm({
+      targetUserId: String(availableMembers[0]?.user_id || ''),
+      tokenId: String(availableTokens[0]?.token_id || ''),
+      qty: '1',
+    });
+    setShowGrantTokensDialog(true);
+  };
+
+  const submitGrantTokens = async () => {
+    if (
+      !grantTokensForm.targetUserId ||
+      !grantTokensForm.tokenId ||
+      !grantTokensForm.qty ||
+      !canManageOrganization
+    ) {
+      return;
+    }
     setAdminError(null);
     try {
       await postJson('/organization-token-grants', {
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
-        token_id: Number(tokenId),
-        target_user_id: Number(targetUserId),
-        qty: Number(qty),
+        token_id: Number(grantTokensForm.tokenId),
+        target_user_id: Number(grantTokensForm.targetUserId),
+        qty: Number(grantTokensForm.qty),
       });
+      setShowGrantTokensDialog(false);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to grant tokens');
@@ -380,6 +419,114 @@ function Organization() {
         </section>
 
       </div>
+      {showAssignRoleDialog && (
+        <ActionDialog
+          title="Assign Organization Role"
+          description="Pick a member and role by name. The app will send the matching ids for you."
+          onClose={() => setShowAssignRoleDialog(false)}
+          onSubmit={submitAssignRole}
+          submitLabel="Assign Role"
+          submitDisabled={!assignRoleForm.targetUserId || !assignRoleForm.roleId}
+        >
+          <label>
+            Member
+            <select
+              value={assignRoleForm.targetUserId}
+              onChange={(event) =>
+                setAssignRoleForm((current) => ({ ...current, targetUserId: event.target.value }))
+              }
+            >
+              <option value="" disabled>
+                Select a member
+              </option>
+              {availableMembers.map((member) => (
+                <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
+                  {formatMemberLabel(member)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Role
+            <select
+              value={assignRoleForm.roleId}
+              onChange={(event) =>
+                setAssignRoleForm((current) => ({ ...current, roleId: event.target.value }))
+              }
+            >
+              <option value="" disabled>
+                Select a role
+              </option>
+              {availableRoles.map((role) => (
+                <option key={role.role_id} value={role.role_id}>
+                  {role.role_id}
+                </option>
+              ))}
+            </select>
+          </label>
+        </ActionDialog>
+      )}
+      {showGrantTokensDialog && (
+        <ActionDialog
+          title="Grant Tokens"
+          description="Choose the member and token by name, then set how many to grant."
+          onClose={() => setShowGrantTokensDialog(false)}
+          onSubmit={submitGrantTokens}
+          submitLabel="Grant Tokens"
+          submitDisabled={
+            !grantTokensForm.targetUserId || !grantTokensForm.tokenId || Number(grantTokensForm.qty) <= 0
+          }
+        >
+          <label>
+            Member
+            <select
+              value={grantTokensForm.targetUserId}
+              onChange={(event) =>
+                setGrantTokensForm((current) => ({ ...current, targetUserId: event.target.value }))
+              }
+            >
+              <option value="" disabled>
+                Select a member
+              </option>
+              {availableMembers.map((member) => (
+                <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
+                  {formatMemberLabel(member)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Token
+            <select
+              value={grantTokensForm.tokenId}
+              onChange={(event) =>
+                setGrantTokensForm((current) => ({ ...current, tokenId: event.target.value }))
+              }
+            >
+              <option value="" disabled>
+                Select a token
+              </option>
+              {availableTokens.map((token) => (
+                <option key={token.token_id} value={String(token.token_id)}>
+                  {token.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Quantity
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={grantTokensForm.qty}
+              onChange={(event) =>
+                setGrantTokensForm((current) => ({ ...current, qty: event.target.value }))
+              }
+            />
+          </label>
+        </ActionDialog>
+      )}
     </section>
   );
 }

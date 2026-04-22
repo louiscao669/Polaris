@@ -1,0 +1,93 @@
+.action-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(2, 6, 23, 0.7);
+  backdrop-filter: blur(6px);
+}
+
+.action-dialog {
+  width: min(32rem, 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(13, 26, 42, 0.98), rgba(7, 14, 24, 0.98));
+  color: #f8fafc;
+  box-shadow: 0 28px 60px rgba(2, 6, 23, 0.45);
+}
+
+.action-dialog__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.25rem 0;
+}
+
+.action-dialog__header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.action-dialog__header p {
+  margin: 0.4rem 0 0;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.action-dialog__close,
+.action-dialog__secondary,
+.action-dialog__primary {
+  border-radius: 12px;
+  padding: 0.7rem 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.action-dialog__close,
+.action-dialog__secondary {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: #e2e8f0;
+}
+
+.action-dialog__form {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.action-dialog__form label {
+  display: grid;
+  gap: 0.45rem;
+  color: #dbe7f5;
+}
+
+.action-dialog__form select,
+.action-dialog__form input,
+.action-dialog__form textarea {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(9, 16, 29, 0.88);
+  color: #f8fafc;
+  padding: 0.8rem 0.9rem;
+}
+
+.action-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.action-dialog__primary {
+  border: 0;
+  background: linear-gradient(135deg, #38bdf8, #0f766e);
+  color: #02111f;
+}
+
+.action-dialog__primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
