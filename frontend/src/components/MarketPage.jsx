@@ -34,6 +34,8 @@ export default function MarketPage() {
   const { organizationId, eventId, marketId } = useParams();
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId') || getStoredUserId();
+  const numericUserId = Number(userId);
+  const numericMarketId = Number(marketId);
 
   const [market, setMarket] = useState(null);
   const [membership, setMembership] = useState(null);
@@ -174,7 +176,7 @@ export default function MarketPage() {
   }, [market?.organization_id, userId]);
 
   useEffect(() => {
-    if (!showAnalytics || !canViewAnalytics || !userId || !marketId) {
+    if (!showAnalytics || !canViewAnalytics || !Number.isFinite(numericUserId) || !Number.isFinite(numericMarketId)) {
       setAnalytics(null);
       setAnalyticsError(null);
       return;
@@ -186,7 +188,9 @@ export default function MarketPage() {
       setAnalyticsLoading(true);
       setAnalyticsError(null);
       try {
-        const q = `user_id=${encodeURIComponent(userId)}&market_id=${encodeURIComponent(marketId)}`;
+        const q = `user_id=${encodeURIComponent(String(numericUserId))}&market_id=${encodeURIComponent(
+          String(numericMarketId)
+        )}`;
         const [liquidity, timeFocus, whales, tradeDistribution, windowComparison, points] =
           await Promise.all([
             readJson(`/markets/stats/liquidity?${q}`),
@@ -222,18 +226,22 @@ export default function MarketPage() {
     return () => {
       cancelled = true;
     };
-  }, [showAnalytics, canViewAnalytics, userId, marketId]);
+  }, [showAnalytics, canViewAnalytics, numericUserId, numericMarketId]);
 
   const handleTradeChange = (field) => (event) => {
     setTradeForm((current) => ({ ...current, [field]: event.target.value }));
   };
 
   const refreshAfterTrade = async () => {
-    if (!userId || !marketId) return;
-    const data = await readJson(`/markets/${marketId}?user_id=${encodeURIComponent(userId)}`);
+    if (!Number.isFinite(numericUserId) || !Number.isFinite(numericMarketId)) return;
+    const data = await readJson(
+      `/markets/${numericMarketId}?user_id=${encodeURIComponent(String(numericUserId))}`
+    );
     setMarket(data);
     if (showAnalytics && canViewAnalytics) {
-      const q = `user_id=${encodeURIComponent(userId)}&market_id=${encodeURIComponent(marketId)}`;
+      const q = `user_id=${encodeURIComponent(String(numericUserId))}&market_id=${encodeURIComponent(
+        String(numericMarketId)
+      )}`;
       const [liquidity, timeFocus, whales, tradeDistribution, windowComparison, points] =
         await Promise.all([
           readJson(`/markets/stats/liquidity?${q}`),
@@ -256,15 +264,15 @@ export default function MarketPage() {
 
   const handleSubmitTrade = async (event) => {
     event.preventDefault();
-    if (!userId || !marketId || !tradeForm.tokenId) return;
+    if (!Number.isFinite(numericUserId) || !Number.isFinite(numericMarketId) || !tradeForm.tokenId) return;
 
     setTradeSubmitting(true);
     setTradeError(null);
     try {
       const operation = await submitV2Operation('/markets/transactions', {
         action: 'MARKET_TRANSACTION',
-        user_id: Number(userId),
-        market_id: Number(marketId),
+        user_id: numericUserId,
+        market_id: numericMarketId,
         token_id: Number(tradeForm.tokenId),
         side: tradeForm.side === 'YES',
         qty: Number(tradeForm.qty),
@@ -433,7 +441,7 @@ export default function MarketPage() {
               <li>Organization: {market?.organization_id ?? '-'}</li>
               <li>
                 Allowed tokens:{' '}
-                {allowedTokenIds.length
+        {allowedTokenIds.length
                   ? allowedTokenIds.map((tokenId) => tokenNameById[String(tokenId)] || `Token #${tokenId}`).join(', ')
                   : 'None'}
               </li>

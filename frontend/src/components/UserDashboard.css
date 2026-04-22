@@ -150,6 +150,11 @@
   background: rgba(40, 136, 73, 0.25);
 }
 
+.user-dashboard-badge--neutral {
+  color: #dbeafe;
+  background: rgba(59, 130, 246, 0.22);
+}
+
 .user-dashboard a {
   color: #90b6ff;
 }

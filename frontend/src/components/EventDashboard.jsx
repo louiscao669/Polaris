@@ -52,6 +52,7 @@ export default function EventDashboard() {
   const [showAddCreatorDialog, setShowAddCreatorDialog] = useState(false);
   const [eventTokenId, setEventTokenId] = useState('');
   const [marketCreatorId, setMarketCreatorId] = useState('');
+  const numericUserId = Number(userId);
 
   const loadEvent = async () => {
     if (!eventId || !userId) return;
@@ -118,7 +119,7 @@ export default function EventDashboard() {
 
   useEffect(() => {
     const loadAnalytics = async () => {
-      if (!showAnalytics || roleView !== 'analyzer' || !userId || markets.length === 0) {
+      if (!showAnalytics || roleView !== 'analyzer' || !Number.isFinite(numericUserId) || markets.length === 0) {
         setMarketAnalytics([]);
         setAnalyticsError(null);
         return;
@@ -127,10 +128,13 @@ export default function EventDashboard() {
       setAnalyticsLoading(true);
       setAnalyticsError(null);
       try {
+        const validMarkets = markets.filter((market) => Number.isFinite(Number(market?.market_id)));
         const analyticsRows = await Promise.all(
-          markets.map(async (market) => {
-            const marketId = market.market_id;
-            const q = `user_id=${encodeURIComponent(userId)}&market_id=${encodeURIComponent(marketId)}`;
+          validMarkets.map(async (market) => {
+            const marketId = Number(market.market_id);
+            const q = `user_id=${encodeURIComponent(String(numericUserId))}&market_id=${encodeURIComponent(
+              String(marketId)
+            )}`;
             const [liquidity, whales, tradeDistribution, windowComparison] = await Promise.all([
               readJson(`/markets/stats/liquidity?${q}`),
               readJson(`/markets/stats/whales?${q}`),
@@ -158,7 +162,7 @@ export default function EventDashboard() {
       }
     };
     loadAnalytics();
-  }, [showAnalytics, roleView, userId, markets]);
+  }, [showAnalytics, roleView, numericUserId, markets]);
 
   useEffect(() => {
     const loadPermissionView = async () => {

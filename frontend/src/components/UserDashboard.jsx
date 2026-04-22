@@ -15,6 +15,11 @@ function formatApiError(err) {
   return String(d);
 }
 
+function formatTokenUnits(value) {
+  const n = Number(value || 0);
+  return `${(n / 100).toFixed(2)} tokens`;
+}
+
 export default function UserDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -43,6 +48,9 @@ export default function UserDashboard() {
   const [events, setEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsError, setEventsError] = useState(null);
+  const [portfolio, setPortfolio] = useState({ token_balances: [], open_tickets: [] });
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [portfolioError, setPortfolioError] = useState(null);
 
   useEffect(() => {
     if (paramId) {
@@ -77,6 +85,28 @@ export default function UserDashboard() {
   useEffect(() => {
     loadOrgs();
   }, [loadOrgs]);
+
+  const loadPortfolio = useCallback(async () => {
+    if (userId == null || Number.isNaN(userId)) return;
+    setPortfolioLoading(true);
+    setPortfolioError(null);
+    try {
+      const data = await readJson(`/dashboard/users/${userId}/portfolio`);
+      setPortfolio({
+        token_balances: Array.isArray(data?.token_balances) ? data.token_balances : [],
+        open_tickets: Array.isArray(data?.open_tickets) ? data.open_tickets : [],
+      });
+    } catch (e) {
+      setPortfolioError(e.message || 'Failed to load balances and tickets');
+      setPortfolio({ token_balances: [], open_tickets: [] });
+    } finally {
+      setPortfolioLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    loadPortfolio();
+  }, [loadPortfolio]);
 
   const loadEvents = useCallback(
     async (orgId) => {
@@ -225,6 +255,58 @@ export default function UserDashboard() {
                     <span className="user-dashboard-muted">Event #{ev.event_id}</span>
                   </div>
                   <span className="user-dashboard-badge">Open</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="user-dashboard-card">
+            <h2>Your token balances</h2>
+            <p className="user-dashboard-muted">
+              Polaris stores tokens in base units, so <code>100</code> means <code>1.00</code> token.
+            </p>
+            {portfolioLoading && <p className="user-dashboard-muted">Loading…</p>}
+            {portfolioError && <p className="user-dashboard-error">{portfolioError}</p>}
+            {!portfolioLoading && !portfolioError && portfolio.token_balances.length === 0 && (
+              <p className="user-dashboard-muted">No token balances yet.</p>
+            )}
+            <ul className="user-dashboard-event-list">
+              {portfolio.token_balances.map((balance) => (
+                <li key={`${balance.organization_id}-${balance.token_id}`}>
+                  <div>
+                    <strong>{balance.token_name}</strong>
+                    <span className="user-dashboard-muted">{balance.organization_name}</span>
+                  </div>
+                  <span className="user-dashboard-badge user-dashboard-badge--neutral">
+                    {formatTokenUnits(balance.qty)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="user-dashboard-card user-dashboard-card--wide">
+            <h2>Your open tickets</h2>
+            {portfolioLoading && <p className="user-dashboard-muted">Loading…</p>}
+            {portfolioError && <p className="user-dashboard-error">{portfolioError}</p>}
+            {!portfolioLoading && !portfolioError && portfolio.open_tickets.length === 0 && (
+              <p className="user-dashboard-muted">You do not have any open tickets yet.</p>
+            )}
+            <ul className="user-dashboard-event-list">
+              {portfolio.open_tickets.map((ticket) => (
+                <li key={`${ticket.market_id}-${ticket.side ? 'yes' : 'no'}`}>
+                  <div>
+                    <strong>{ticket.question}</strong>
+                    <span className="user-dashboard-muted">
+                      {ticket.organization_name} · {ticket.event_caption}
+                    </span>
+                    <span className="user-dashboard-muted">
+                      {ticket.side ? 'YES' : 'NO'} side · {ticket.is_open ? 'Open market' : 'Resolved market'}
+                    </span>
+                  </div>
+                  <span className="user-dashboard-badge">
+                    {ticket.qty} ticket{ticket.qty === 1 ? '' : 's'}
+                  </span>
                 </li>
               ))}
             </ul>
