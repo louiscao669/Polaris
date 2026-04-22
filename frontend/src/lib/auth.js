@@ -22,3 +22,8 @@ export function getStoredUserId() {
   const n = Number(auth?.userId);
   return Number.isNaN(n) ? null : n;
 }
+
+export function getStoredSessionToken() {
+  const auth = loadAuth();
+  return auth?.sessionToken || null;
+}

@@ -4,6 +4,7 @@ import Footer from './components/Footer'
 import LandingPage from './components/LandingPage'
 import Organization from './components/Organization'
 import EventDashboard from './components/EventDashboard'
+import MarketPage from './components/MarketPage'
 import UserDashboard from './components/UserDashboard'
 import SignUp from './my_app/sign_up/SignUp';
 import SignIn from './my_app/sign_in/SignIn';
@@ -70,6 +71,16 @@ function EventDashboardPage({ user }) {
   );
 }
 
+function MarketDetailPage({ user }) {
+  return (
+    <Layout user={user} homeUrl="/">
+      <section className="signup-section" aria-label="Market detail">
+        <MarketPage />
+      </section>
+    </Layout>
+  );
+}
+
 function App() {
   const user = { isAuthenticated: false };
 
@@ -80,6 +91,7 @@ function App() {
       <Route path="/signin" element={<SignInPage user={user} />} />
       <Route path="/organization/:organizationId" element={<OrganizationPage user={user} />} />
       <Route path="/organization/:organizationId/events/:eventId" element={<EventDashboardPage user={user} />}/>
+      <Route path="/organization/:organizationId/events/:eventId/markets/:marketId" element={<MarketDetailPage user={user} />}/>
       <Route path="/organization" element={<OrganizationPage user={user} />} />
       <Route path="/dashboard/:organizationId" element={<UserDashboardPage user={user} />} />
       <Route path="/dashboard" element={<UserDashboardPage user={user} />} />

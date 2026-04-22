@@ -1,7 +1,7 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import './EventDashboard.css';
-import { readJson } from '../lib/api';
+import { pollOperation, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
 
@@ -36,38 +36,41 @@ export default function EventDashboard() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState(null);
   const [marketAnalytics, setMarketAnalytics] = useState([]);
+  const [marketActionError, setMarketActionError] = useState(null);
+
+  const loadEvent = async () => {
+    if (!eventId || !userId) return;
+    setLoading(true);
+    try {
+      const data = await readJson(`/events/${eventId}?user_id=${encodeURIComponent(userId)}`);
+      setEventData(data);
+    } catch (e) {
+      console.error(e);
+      setEventData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMarkets = async () => {
+    if (!eventId || !userId) return;
+    setMarketsLoading(true);
+    try {
+      const rows = await readJson(`/events/${eventId}/markets?user_id=${encodeURIComponent(userId)}`);
+      setMarkets(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      console.error(e);
+      setMarkets([]);
+    } finally {
+      setMarketsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadEvent = async () => {
-      if (!eventId || !userId) return;
-      setLoading(true);
-      try {
-        const data = await readJson(`/events/${eventId}?user_id=${encodeURIComponent(userId)}`);
-        setEventData(data);
-      } catch (e) {
-        console.error(e);
-        setEventData(null);
-      } finally {
-        setLoading(false);
-      }
-    };
     loadEvent();
   }, [eventId, userId]);
 
   useEffect(() => {
-    const loadMarkets = async () => {
-      if (!eventId || !userId) return;
-      setMarketsLoading(true);
-      try {
-        const rows = await readJson(`/events/${eventId}/markets?user_id=${encodeURIComponent(userId)}`);
-        setMarkets(Array.isArray(rows) ? rows : []);
-      } catch (e) {
-        console.error(e);
-        setMarkets([]);
-      } finally {
-        setMarketsLoading(false);
-      }
-    };
     loadMarkets();
   }, [eventId, userId]);
 
@@ -177,6 +180,35 @@ export default function EventDashboard() {
   };
   const activeRoleSection = roleSections[roleView] || roleSections.viewer;
   const tokensAllowed = Array.isArray(eventData?.tokens_allowed) ? eventData.tokens_allowed : [];
+  const canCreateMarket = roleView === 'analyzer' && !!eventId && !!userId;
+
+  const handleCreateMarket = async () => {
+    const question = window.prompt('Enter the market question');
+    if (!question || !eventId || !userId) return;
+
+    const description =
+      window.prompt('Enter a short market description') ||
+      `${question} market for event ${eventId}`;
+
+    setMarketActionError(null);
+
+    try {
+      const op = await submitV2Operation('/markets/lifecycle', {
+        action: 'CREATE_MARKET',
+        user_id: Number(userId),
+        event_id: Number(eventId),
+        question,
+        description,
+      });
+      await pollOperation(op.operation_id, {
+        headers: { 'X-Force-Leader': 'true' },
+      });
+      await loadMarkets();
+    } catch (e) {
+      console.error(e);
+      setMarketActionError(e.message || 'Failed to create market');
+    }
+  };
 
   return (
     <section className="event-page" aria-label="Event dashboard">
@@ -193,7 +225,13 @@ export default function EventDashboard() {
 
         <div className="event-actions">
           <Link to={`/organization/${organizationId}${userId ? `?userId=${userId}` : ''}`}>Back to organization</Link>
+          {canCreateMarket && (
+            <button type="button" className="analyze-btn" onClick={handleCreateMarket}>
+              Create Market
+            </button>
+          )}
         </div>
+        {marketActionError && <p className="event-muted">{marketActionError}</p>}
 
         <section className="event-dashboard-content">
           <header className="event-dashboard-content__header">
@@ -208,7 +246,15 @@ export default function EventDashboard() {
             )}
             {markets.map((market) => (
               <article key={market.question} className="binary-market-card">
-                <h3>{market.question}</h3>
+                <h3>
+                  <Link
+                    to={`/organization/${organizationId}/events/${eventId}/markets/${market.market_id}${
+                      userId ? `?userId=${userId}` : ''
+                    }`}
+                  >
+                    {market.question}
+                  </Link>
+                </h3>
                 <p className="binary-market-card__meta">
                   Market #{market.market_id} · {market.is_open ? 'Open' : 'Closed'}
                 </p>
