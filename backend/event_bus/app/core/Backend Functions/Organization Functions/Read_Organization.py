@@ -3,9 +3,9 @@ from typing import Any
 import pymysql
 from fail import _fail, _log_result
 try:
-    from app.database import get_connection
+    from app.database import get_connection_reader
 except ImportError:
-    from backend.event_bus.app.database import get_connection
+    from backend.event_bus.app.database import get_connection_reader
 
 def read_user_organizations(data: dict[str, Any]):
     user_id = data.get("user_id")
@@ -15,7 +15,7 @@ def read_user_organizations(data: dict[str, Any]):
         _log_result("read_user_organizations", result)
         return result
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _read_user_organizations(cursor, db, user_id)
     _log_result("read_user_organizations", result)
@@ -87,7 +87,7 @@ def read_o(data: dict[str, Any]):
         _log_result("read_o", result)
         return result
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _read_o(cursor, db, user_id, organization_id)
     _log_result("read_o", result)

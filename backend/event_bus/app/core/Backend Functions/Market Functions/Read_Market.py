@@ -20,9 +20,9 @@ except ImportError:
         metadata_read_cache,
     )
 try:
-    from app.database import get_connection
+    from app.database import get_connection_reader, get_connection_writer
 except ImportError:
-    from backend.event_bus.app.database import get_connection
+    from backend.event_bus.app.database import get_connection_reader, get_connection_writer
 
 
 def _cache_success(key: str, value: Any, ttl_seconds: float) -> Any:
@@ -55,7 +55,7 @@ def stats_m_liquidity(data: dict[str, Any]):
         _log_result("stats_m_liquidity", cached)
         return cached
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _stats_m_liquidity(cursor, db, user_id, market_id)
     result = _cache_success(cache_key, result, 3.0)
@@ -139,7 +139,7 @@ def stats_m_time_focus(data: dict[str, Any]):
         _log_result("stats_m_time_focus", result)
         return result
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _stats_m_time_focus(cursor, db, user_id, market_id)
     _log_result("stats_m_time_focus", result)
@@ -237,7 +237,7 @@ def stats_m_whales(data: dict[str, Any]):
         _log_result("stats_m_whales", result)
         return result
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _stats_m_whales(cursor, db, user_id, market_id)
     _log_result("stats_m_whales", result)
@@ -339,7 +339,7 @@ def points_m(data: dict[str, Any]):
         _log_result("points_m", result)
         return result
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _points_m(cursor, db, user_id, market_id, span)
     _log_result("points_m", result)
@@ -442,7 +442,7 @@ def stats_m_trade_distribution(data: dict[str, Any]):
         _log_result("stats_m_trade_distribution", cached)
         return cached
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _stats_m_trade_distribution(cursor, db, user_id, market_id)
     result = _cache_success(cache_key, result, 5.0)
@@ -534,7 +534,7 @@ def stats_m_window_comparison(data: dict[str, Any]):
         _log_result("stats_m_window_comparison", cached)
         return cached
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _stats_m_window_comparison(cursor, db, user_id, market_id, hours)
     result = _cache_success(cache_key, result, 5.0)
@@ -623,7 +623,7 @@ def read_e_markets(data: dict[str, Any]):
         _log_result("read_e_markets", cached)
         return cached
 
-    with get_connection() as db:
+    with get_connection_writer() as db:
         cursor = db.cursor()
         result = _read_e_markets(cursor, db, user_id, event_id)
     if not (isinstance(result, dict) and result.get("ok") is False):
@@ -754,7 +754,7 @@ def read_m(data: dict[str, Any]):
         _log_result("read_m", cached)
         return cached
 
-    with get_connection() as db:
+    with get_connection_writer() as db:
         cursor = db.cursor()
         result = _read_m(cursor, db, user_id, market_id)
     if not (isinstance(result, dict) and result.get("ok") is False):

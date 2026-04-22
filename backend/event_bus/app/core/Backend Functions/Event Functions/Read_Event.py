@@ -7,9 +7,9 @@ try:
 except ImportError:
     from backend.event_bus.app.read_cache import metadata_read_cache, org_events_key
 try:
-    from app.database import get_connection
+    from app.database import get_connection_reader
 except ImportError:
-    from backend.event_bus.app.database import get_connection
+    from backend.event_bus.app.database import get_connection_reader
 
 def read_o_events(data: dict[str, Any]):
     user_id = data.get("user_id")
@@ -34,7 +34,7 @@ def read_o_events(data: dict[str, Any]):
         _log_result("read_o_events", cached)
         return cached
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _read_o_events(cursor, db, user_id, organization_id)
     if not (isinstance(result, dict) and result.get("ok") is False):
@@ -125,7 +125,7 @@ def read_e(data: dict[str, Any]):
         _log_result("read_e", result)
         return result
 
-    with get_connection() as db:
+    with get_connection_reader() as db:
         cursor = db.cursor()
         result = _read_e(cursor, db, user_id, event_id)
     _log_result("read_e", result)
