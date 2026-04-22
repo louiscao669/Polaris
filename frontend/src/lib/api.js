@@ -63,6 +63,26 @@ export async function postJson(path, body, options = {}) {
   return payload;
 }
 
+export async function putJson(path, body, options = {}) {
+  const response = await fetch(`${READ_API_BASE}${path}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+    body: JSON.stringify(body),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(formatApiError(payload, `HTTP ${response.status}`));
+  }
+
+  return payload;
+}
+
 export async function submitV2Operation(path, body, options = {}) {
   const response = await fetch(`${WRITE_API_BASE}${path}`, {
     method: 'POST',

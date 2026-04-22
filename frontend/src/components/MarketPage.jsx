@@ -1,7 +1,7 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import './MarketPage.css';
-import { pollOperation, readJson, submitV2Operation } from '../lib/api';
+import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
 
@@ -34,6 +34,7 @@ export default function MarketPage() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState(null);
   const [analytics, setAnalytics] = useState(null);
+  const [adminError, setAdminError] = useState(null);
   const [tradeForm, setTradeForm] = useState({
     transactionType: 'BUY',
     side: 'YES',
@@ -44,6 +45,7 @@ export default function MarketPage() {
   const roleView = buildRoleView(membership);
   const canBet = roleView === 'bettor' || roleView === 'analyzer';
   const canViewAnalytics = roleView === 'analyzer';
+  const canManageMarket = !!userId && (market?.is_leader || Number(market?.created_by) === Number(userId));
 
   const allowedTokenIds = useMemo(
     () => (Array.isArray(market?.tokens_allowed) ? market.tokens_allowed : []),
@@ -222,6 +224,81 @@ export default function MarketPage() {
     }
   };
 
+  const handleRenameMarket = async () => {
+    const question = window.prompt('Market question', market?.question || '');
+    if (!question || !canManageMarket) return;
+    setAdminError(null);
+    try {
+      await putJson(`/markets/${marketId}`, {
+        user_id: Number(userId),
+        question,
+      });
+      await refreshAfterTrade();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to update market');
+    }
+  };
+
+  const handleAddMarketToken = async () => {
+    const tokenId = window.prompt('Organization token id to allow in this market');
+    if (!tokenId || !canManageMarket) return;
+    setAdminError(null);
+    try {
+      await postJson('/markets/designate-token', {
+        user_id: Number(userId),
+        market_id: Number(marketId),
+        token_id: Number(tokenId),
+      });
+      await refreshAfterTrade();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to add market token');
+    }
+  };
+
+  const handleAllowMarketRole = async () => {
+    const roleId = window.prompt('Role id allowed in this market');
+    if (!roleId || !canManageMarket) return;
+    const asId = window.prompt('Access level (as_id / market_as code)');
+    if (!asId) return;
+    setAdminError(null);
+    try {
+      await postJson('/markets/designate-open-to-as', {
+        user_id: Number(userId),
+        market_id: Number(marketId),
+        role_id: roleId,
+        as_id: asId,
+      });
+      await refreshAfterTrade();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to update market access');
+    }
+  };
+
+  const handleResolveMarket = async () => {
+    const outcome = window.prompt('Resolve market to YES or NO');
+    if (!outcome || !canManageMarket) return;
+    const normalized = outcome.trim().toUpperCase();
+    if (!['YES', 'NO', 'TRUE', 'FALSE'].includes(normalized)) {
+      setAdminError('Enter YES or NO when resolving the market');
+      return;
+    }
+    setAdminError(null);
+    try {
+      await postJson('/markets/designate-result', {
+        user_id: Number(userId),
+        market_id: Number(marketId),
+        result: normalized === 'YES' || normalized === 'TRUE',
+      });
+      await refreshAfterTrade();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to resolve market');
+    }
+  };
+
   return (
     <section className="market-page" aria-label="Market page">
       <div className="market-shell">
@@ -238,7 +315,16 @@ export default function MarketPage() {
               {showAnalytics ? 'Hide Analytics' : 'View Analytics'}
             </button>
           )}
+          {canManageMarket && (
+            <>
+              <button type="button" className="market-toggle" onClick={handleRenameMarket}>Edit Market</button>
+              <button type="button" className="market-toggle" onClick={handleAddMarketToken}>Add Token</button>
+              <button type="button" className="market-toggle" onClick={handleAllowMarketRole}>Allow Role</button>
+              <button type="button" className="market-toggle" onClick={handleResolveMarket}>Resolve</button>
+            </>
+          )}
         </div>
+        {adminError && <p className="market-error">{adminError}</p>}
 
         <header className="market-hero">
           <p className="market-kicker">Market Detail</p>

@@ -1,7 +1,7 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import './EventDashboard.css';
-import { pollOperation, readJson, submitV2Operation } from '../lib/api';
+import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
 
@@ -37,6 +37,7 @@ export default function EventDashboard() {
   const [analyticsError, setAnalyticsError] = useState(null);
   const [marketAnalytics, setMarketAnalytics] = useState([]);
   const [marketActionError, setMarketActionError] = useState(null);
+  const [adminError, setAdminError] = useState(null);
 
   const loadEvent = async () => {
     if (!eventId || !userId) return;
@@ -181,6 +182,7 @@ export default function EventDashboard() {
   const activeRoleSection = roleSections[roleView] || roleSections.viewer;
   const tokensAllowed = Array.isArray(eventData?.tokens_allowed) ? eventData.tokens_allowed : [];
   const canCreateMarket = roleView === 'analyzer' && !!eventId && !!userId;
+  const canManageEvent = !!eventData?.is_leader && !!eventId && !!userId;
 
   const handleCreateMarket = async () => {
     const question = window.prompt('Enter the market question');
@@ -210,6 +212,77 @@ export default function EventDashboard() {
     }
   };
 
+  const refreshEventData = async () => {
+    await Promise.all([loadEvent(), loadMarkets()]);
+  };
+
+  const handleRenameEvent = async () => {
+    const caption = window.prompt('Event caption', eventData?.caption || '');
+    if (!caption || !canManageEvent) return;
+    setAdminError(null);
+    try {
+      await putJson(`/events/${eventId}`, {
+        user_id: Number(userId),
+        caption,
+      });
+      await loadEvent();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to update event');
+    }
+  };
+
+  const handleAllowRole = async () => {
+    const roleId = window.prompt('Role id allowed to view this event');
+    if (!roleId || !canManageEvent) return;
+    setAdminError(null);
+    try {
+      await postJson('/events/designate-open-to', {
+        user_id: Number(userId),
+        event_id: Number(eventId),
+        role_id: roleId,
+      });
+      await loadEvent();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to add event visibility role');
+    }
+  };
+
+  const handleAddEventToken = async () => {
+    const tokenId = window.prompt('Organization token id to allow in this event');
+    if (!tokenId || !canManageEvent) return;
+    setAdminError(null);
+    try {
+      await postJson('/events/designate-token', {
+        user_id: Number(userId),
+        event_id: Number(eventId),
+        token_id: Number(tokenId),
+      });
+      await loadEvent();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to add event token');
+    }
+  };
+
+  const handleAddMarketCreator = async () => {
+    const creatorId = window.prompt('User id to authorize as market creator');
+    if (!creatorId || !canManageEvent) return;
+    setAdminError(null);
+    try {
+      await postJson('/events/designate-market-creator', {
+        user_id: Number(userId),
+        event_id: Number(eventId),
+        market_creator_id: Number(creatorId),
+      });
+      await loadEvent();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to add market creator');
+    }
+  };
+
   return (
     <section className="event-page" aria-label="Event dashboard">
       <div className="event-shell">
@@ -230,8 +303,17 @@ export default function EventDashboard() {
               Create Market
             </button>
           )}
+          {canManageEvent && (
+            <>
+              <button type="button" className="analyze-btn" onClick={handleRenameEvent}>Edit Event</button>
+              <button type="button" className="analyze-btn" onClick={handleAllowRole}>Allow Role</button>
+              <button type="button" className="analyze-btn" onClick={handleAddEventToken}>Add Token</button>
+              <button type="button" className="analyze-btn" onClick={handleAddMarketCreator}>Add Market Creator</button>
+            </>
+          )}
         </div>
         {marketActionError && <p className="event-muted">{marketActionError}</p>}
+        {adminError && <p className="event-muted">{adminError}</p>}
 
         <section className="event-dashboard-content">
           <header className="event-dashboard-content__header">

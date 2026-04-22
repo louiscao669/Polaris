@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import OrganizationMembership from './OrganizationMembership';
-import { pollOperation, readJson, submitV2Operation } from '../lib/api';
+import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 
 function Organization() { 
@@ -23,6 +23,7 @@ function Organization() {
   const [numParticipantsLoading, setNumParticipantsLoading] = useState(false);
   const [numEventsLoading, setNumEventsLoading] = useState(false);
   const [numMarketsLoading, setNumMarketsLoading] = useState(false);
+  const [adminError, setAdminError] = useState(null);
 
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId') || getStoredUserId();
@@ -118,6 +119,12 @@ function Organization() {
     { label: 'Total Volume', value: totalVolume },
   ];
 
+  const canManageOrganization = !!orgData?.is_leader && !!userId && normalizedOrganizationId != null;
+
+  const refreshOrganization = async () => {
+    await Promise.all([loadOrganization(), loadOrganizationEvents()]);
+  };
+
   const handleCreateNewEvent = async () => {
     const eventName = prompt('Enter the name of the new event');
     try {
@@ -138,6 +145,81 @@ function Organization() {
     } catch (e) {
       console.error(e);
       alert('Error creating new event');
+    }
+  };
+
+  const handleEditOrganization = async () => {
+    const nextName = window.prompt('Organization name', orgData?.name || '');
+    if (!nextName || !canManageOrganization) return;
+    const nextDescription = window.prompt('Organization description', orgData?.description || '') || '';
+    setAdminError(null);
+    try {
+      await putJson(`/organizations/${normalizedOrganizationId}`, {
+        user_id: Number(userId),
+        name: nextName,
+        description: nextDescription,
+      });
+      await loadOrganization();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to update organization');
+    }
+  };
+
+  const handleCreateRole = async () => {
+    const roleName = window.prompt('Role name');
+    if (!roleName || !canManageOrganization) return;
+    const desc = window.prompt('Role description') || '';
+    setAdminError(null);
+    try {
+      await postJson('/organization-roles', {
+        user_id: Number(userId),
+        organization_id: normalizedOrganizationId,
+        name: roleName,
+        desc,
+      });
+      await loadOrganization();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to create role');
+    }
+  };
+
+  const handleCreateToken = async () => {
+    const tokenName = window.prompt('Token name');
+    if (!tokenName || !canManageOrganization) return;
+    const description = window.prompt('Token description') || '';
+    setAdminError(null);
+    try {
+      await postJson('/organization-tokens', {
+        user_id: Number(userId),
+        organization_id: normalizedOrganizationId,
+        token_name: tokenName,
+        description,
+      });
+      await loadOrganization();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to create token');
+    }
+  };
+
+  const handleAssignRole = async () => {
+    const targetUserId = window.prompt('User id to assign');
+    const roleId = window.prompt('Role id to assign');
+    if (!targetUserId || !roleId || !canManageOrganization) return;
+    setAdminError(null);
+    try {
+      await postJson('/organization-members', {
+        user_id: Number(userId),
+        organization_id: normalizedOrganizationId,
+        target_user_id: Number(targetUserId),
+        role_id: roleId,
+      });
+      await loadOrganization();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to assign role');
     }
   };
 
@@ -176,7 +258,24 @@ function Organization() {
             <button type="button" className="organization-actions__secondary">
               Invite Members
             </button>
+            {canManageOrganization && (
+              <>
+                <button type="button" className="organization-actions__secondary" onClick={handleEditOrganization}>
+                  Edit Org
+                </button>
+                <button type="button" className="organization-actions__secondary" onClick={handleCreateRole}>
+                  Create Role
+                </button>
+                <button type="button" className="organization-actions__secondary" onClick={handleCreateToken}>
+                  Create Token
+                </button>
+                <button type="button" className="organization-actions__secondary" onClick={handleAssignRole}>
+                  Assign Role
+                </button>
+              </>
+            )}
           </div>
+          {adminError && <p className="organization-inline-note">{adminError}</p>}
         </header>
 
         <section className="organization-stats" aria-label="Organization metrics">
@@ -218,6 +317,42 @@ function Organization() {
               <li>Approve role requests from 6 pending users</li>
               <li>Export monthly participation report</li> */}
             </ul>
+            {Array.isArray(orgData?.roles) && orgData.roles.length > 0 && (
+              <>
+                <h3>Roles</h3>
+                <ul>
+                  {orgData.roles.map((role) => (
+                    <li key={role.role_id}>
+                      <strong>{role.role_id}</strong>: {role.description}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {Array.isArray(orgData?.tokens) && orgData.tokens.length > 0 && (
+              <>
+                <h3>Tokens</h3>
+                <ul>
+                  {orgData.tokens.map((token) => (
+                    <li key={token.token_id}>
+                      <strong>{token.name}</strong> (#{token.token_id})
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {Array.isArray(orgData?.members) && orgData.members.length > 0 && (
+              <>
+                <h3>Members</h3>
+                <ul>
+                  {orgData.members.map((member) => (
+                    <li key={`${member.user_id}-${member.role_id}`}>
+                      {member.username} (#{member.user_id}) - {member.role_id}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </article>
         </section>
 
