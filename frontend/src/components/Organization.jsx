@@ -8,6 +8,10 @@ import { getStoredUserId } from '../lib/auth';
 
 function Organization() { 
   const { organizationId } = useParams();
+  const normalizedOrganizationId = (() => {
+    const parsed = Number(organizationId);
+    return Number.isFinite(parsed) ? parsed : null;
+  })();
   const [orgData, setOrgData] = useState(null);
   const [orgLoading, setOrgLoading] = useState(false);
   const [events, setEvents] = useState([]);
@@ -24,13 +28,13 @@ function Organization() {
   const userId = searchParams.get('userId') || getStoredUserId();
 
   const loadOrganization = async () => {
-    if (!organizationId) {
+    if (normalizedOrganizationId == null) {
       setOrgData(null);
       return;
     }
     setOrgLoading(true);
     try {
-      const data = await readJson(`/organizations/${organizationId}`);
+      const data = await readJson(`/organizations/${normalizedOrganizationId}`);
         setOrgData(data);
     } catch (e) {
       console.error(e);
@@ -42,7 +46,7 @@ function Organization() {
 
   const loadOrganizationStats = async () => {
 
-    if (!organizationId) {
+    if (normalizedOrganizationId == null) {
       setNumParticipants(0);
       setNumEvents(0);
       setNumMarkets(0);
@@ -52,7 +56,7 @@ function Organization() {
   
     setNumParticipantsLoading(true);
     try {
-      const data = await readJson(`/dashboard/organizations/${organizationId}/num-participants`);
+      const data = await readJson(`/dashboard/organizations/${normalizedOrganizationId}/num-participants`);
       setNumParticipants(data);
     } catch (e) {
       console.error(e);
@@ -63,7 +67,7 @@ function Organization() {
 
     setNumEventsLoading(true);
     try {
-      const data = await readJson(`/dashboard/organizations/${organizationId}/num-events`);
+      const data = await readJson(`/dashboard/organizations/${normalizedOrganizationId}/num-events`);
       setNumEvents(data);
     } catch (e) {
       console.error(e);
@@ -88,7 +92,7 @@ function Organization() {
     }
 
     try {
-      const data = await readJson(`/dashboard/organizations/${organizationId}/total-volume`);
+      const data = await readJson(`/dashboard/organizations/${normalizedOrganizationId}/total-volume`);
       setTotalVolume(Number(data) || 0);
     } catch (e) {
       console.error(e);
@@ -98,16 +102,16 @@ function Organization() {
 
   useEffect(() => {
     loadOrganizationStats();
-  }, [organizationId, events]);
+  }, [normalizedOrganizationId, events]);
 
   const loadOrganizationEvents = async () => {
-    if (!organizationId) {
+    if (normalizedOrganizationId == null) {
       setEvents([]);
       return;
     }
     setEventsLoading(true);
     try {
-      const data = await readJson(`/organizations/${organizationId}/events`);
+      const data = await readJson(`/organizations/${normalizedOrganizationId}/events`);
       setEvents(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
@@ -121,7 +125,7 @@ function Organization() {
     setEvents([]);
     loadOrganization();
     loadOrganizationEvents();
-  }, [organizationId]);
+  }, [normalizedOrganizationId]);
 
   const stats = [
     { label: 'Active Events', value: numEvents },
@@ -133,11 +137,11 @@ function Organization() {
   const handleCreateNewEvent = async () => {
     const eventName = prompt('Enter the name of the new event');
     try {
-      if (eventName && userId) {
+      if (eventName && userId && normalizedOrganizationId != null) {
         const op = await submitV2Operation('/events/lifecycle', {
           action: 'CREATE_EVENT',
           user_id: Number(userId),
-          organization_id: Number(organizationId),
+          organization_id: normalizedOrganizationId,
           caption: eventName,
         });
         await pollOperation(op.operation_id, {
@@ -145,7 +149,7 @@ function Organization() {
         });
         loadOrganizationEvents();
       } else {
-        alert('Please login to create a new event');
+        alert('Open a valid organization and sign in to create a new event');
       }
     } catch (e) {
       console.error(e);
@@ -171,7 +175,7 @@ function Organization() {
             : 'Manage events, monitor market activity, and keep your organization aligned with transparent forecasting.'}
           </p>
           {userId ? (
-            <OrganizationMembership organizationId={organizationId} userId={userId} />
+            <OrganizationMembership organizationId={normalizedOrganizationId} userId={userId} />
           ) : (
             <div className="organization-membership organization-membership--guest" role="note">
               <span className="organization-membership__label">Your role</span>
@@ -212,7 +216,7 @@ function Organization() {
                 <li key={event.event_id}>
                   <div>
                     <strong>
-                      <Link to={`/organization/${organizationId}/events/${event.event_id}${userId ? `?userId=${userId}` : ''}`}>
+                      <Link to={`/organization/${normalizedOrganizationId}/events/${event.event_id}${userId ? `?userId=${userId}` : ''}`}>
                         {event.caption}
                       </Link>
                     </strong>
