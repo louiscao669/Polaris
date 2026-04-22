@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import './EventDashboard.css';
 import { readJson } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
+import { normalizeOrganizationMembershipList } from '../lib/organizations';
 
 const binaryMarkets = [
   { question: 'Will Q2 launch ship before June 30?', yes: 62, no: 38, volume: '2,140' },
@@ -97,12 +98,14 @@ export default function EventDashboard() {
         return;
       }
       try {
-        const orgs = await readJson(`/dashboard/users/${userId}/organizations`);
+        const orgs = normalizeOrganizationMembershipList(
+          await readJson(`/dashboard/users/${userId}/organizations`)
+        );
         if (!Array.isArray(orgs)) {
           setRoleView('viewer');
           return;
         }
-        const current = orgs.find((o) => String(o.org_id) === String(organizationId));
+        const current = orgs.find((o) => String(o.organization_id) === String(organizationId));
         if (!current) {
           setRoleView('viewer');
           return;

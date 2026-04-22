@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { readJson } from '../lib/api';
+import { normalizeOrganizationMembershipList } from '../lib/organizations';
 
 /**
  * Shows whether the current user is an organization leader or a member (from dashboard API).
@@ -17,12 +18,14 @@ export default function OrganizationMembership({ organizationId, userId }) {
       setPhase('loading');
       setRoleId(null);
       try {
-        const orgs = await readJson(`/dashboard/users/${userId}/organizations`);
+        const orgs = normalizeOrganizationMembershipList(
+          await readJson(`/dashboard/users/${userId}/organizations`)
+        );
         if (!Array.isArray(orgs)) {
           if (!cancelled) setPhase('error');
           return;
         }
-        const current = orgs.find((o) => String(o.org_id) === String(organizationId));
+        const current = orgs.find((o) => String(o.organization_id) === String(organizationId));
         if (cancelled) return;
         if (!current) {
           setPhase('not_in_org');

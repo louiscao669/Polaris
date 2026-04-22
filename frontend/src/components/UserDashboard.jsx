@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import './UserDashboard.css';
 import { API_BASE, pollOperation, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
+import { normalizeOrganizationMembershipList } from '../lib/organizations';
 
 function formatApiError(err) {
   const d = err?.detail;
@@ -64,7 +65,7 @@ export default function UserDashboard() {
     setOrgsError(null);
     try {
       const data = await readJson(`/dashboard/users/${userId}/organizations`);
-      setOrgs(Array.isArray(data) ? data : []);
+      setOrgs(normalizeOrganizationMembershipList(data));
     } catch (e) {
       setOrgsError(e.message || 'Failed to load organizations');
       setOrgs([]);
@@ -184,15 +185,15 @@ export default function UserDashboard() {
             )}
             <ul className="user-dashboard-org-list">
               {orgs.map((o) => (
-                <li key={o.org_id}>
+                <li key={o.organization_id}>
                   <button
                     type="button"
                     className={
-                      selectedOrgId === o.org_id
+                      selectedOrgId === o.organization_id
                         ? 'user-dashboard-org-btn is-active'
                         : 'user-dashboard-org-btn'
                     }
-                    onClick={() => selectOrganization(o.org_id)}
+                    onClick={() => selectOrganization(o.organization_id)}
                   >
                     <span className="user-dashboard-org-name">{o.name}</span>
                     <span className="user-dashboard-org-meta">
