@@ -1,4 +1,4 @@
-const DEFAULT_API_ROOT = 'http://polaris-alb-32340120.us-east-2.elb.amazonaws.com';
+const DEFAULT_API_ROOT = 'https://d2vrkasldxh3jt.cloudfront.net';
 
 export const API_ROOT = (
   import.meta.env.VITE_API_ROOT_URL ||
