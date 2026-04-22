@@ -20,6 +20,7 @@ from .settings_kafka import KAFKA_BOOTSTRAP_SERVERS, KAFKA_USE_MSK_IAM
 from .settings_worker import worker_topics_and_group
 from .v2_kafka_client import v2_kafka_producer
 from .v2_kafka_worker import PolarisV2Worker
+from .read_routes import router as read_router
 from .v2_routes import router as v2_router
 from dotenv import load_dotenv
 load_dotenv()
@@ -103,6 +104,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(v2_router)
+app.include_router(read_router)
 
 
 @app.get("/")
