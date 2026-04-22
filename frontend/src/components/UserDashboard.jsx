@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import './UserDashboard.css';
-
-const API_BASE = 'http://localhost:8000';
+import { API_BASE, pollOperation, readJson, submitV2Operation } from '../lib/api';
+import { getStoredUserId } from '../lib/auth';
 
 function formatApiError(err) {
   const d = err?.detail;
@@ -31,7 +31,7 @@ export default function UserDashboard() {
       const n = Number(fromLogin);
       return Number.isNaN(n) ? null : n;
     }
-    return null;
+    return getStoredUserId();
   });
 
   const [orgs, setOrgs] = useState([]);
@@ -63,12 +63,7 @@ export default function UserDashboard() {
     setOrgsLoading(true);
     setOrgsError(null);
     try {
-      const res = await fetch(`${API_BASE}/dashboard/users/${userId}/organizations`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(formatApiError(err) || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
+      const data = await readJson(`/dashboard/users/${userId}/organizations`);
       setOrgs(Array.isArray(data) ? data : []);
     } catch (e) {
       setOrgsError(e.message || 'Failed to load organizations');
@@ -90,14 +85,7 @@ export default function UserDashboard() {
       setEventsError(null);
       try {
         const q = new URLSearchParams({ user_id: String(userId) });
-        const res = await fetch(
-          `${API_BASE}/dashboard/organizations/${orgId}/events?${q.toString()}`
-        );
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(formatApiError(err) || `HTTP ${res.status}`);
-        }
-        const data = await res.json();
+        const data = await readJson(`/dashboard/organizations/${orgId}/events?${q.toString()}`);
         setEvents(Array.isArray(data) ? data : []);
       } catch (e) {
         setEventsError(e.message || 'Failed to load events');
@@ -120,7 +108,34 @@ export default function UserDashboard() {
   }, [orgIdFromPath, userId, loadEvents]);
 
   const selectOrganization = (orgId) => {
-    navigate(`/organization/${orgId}`);
+    navigate(`/organization/${orgId}${userId ? `?userId=${userId}` : ''}`);
+  };
+
+  const createOrganization = async () => {
+    if (userId == null || Number.isNaN(userId)) {
+      navigate('/signin');
+      return;
+    }
+
+    const name = prompt('Enter the organization name');
+    if (!name) return;
+
+    const description = prompt('Enter a short organization description') || '';
+
+    try {
+      const op = await submitV2Operation('/org/management', {
+        action: 'CREATE_ORGANIZATION',
+        user_id: Number(userId),
+        name,
+        description,
+      });
+      await pollOperation(op.operation_id, {
+        headers: { 'X-Force-Leader': 'true' },
+      });
+      await loadOrgs();
+    } catch (e) {
+      setOrgsError(e.message || 'Failed to create organization');
+    }
   };
 
   if (userId == null || Number.isNaN(userId)) {
@@ -155,6 +170,11 @@ export default function UserDashboard() {
         <div className="user-dashboard-grid">
           <article className="user-dashboard-card">
             <h2>Your organizations</h2>
+            <p className="user-dashboard-muted">
+              <button type="button" className="user-dashboard-org-btn" onClick={createOrganization}>
+                Create organization
+              </button>
+            </p>
             {orgsLoading && <p className="user-dashboard-muted">Loading…</p>}
             {orgsError && <p className="user-dashboard-error">{orgsError}</p>}
             {!orgsLoading && !orgsError && orgs.length === 0 && (

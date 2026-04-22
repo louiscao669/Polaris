@@ -1,8 +1,8 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import './EventDashboard.css';
-
-const API_BASE = 'http://localhost:8000';
+import { readJson } from '../lib/api';
+import { getStoredUserId } from '../lib/auth';
 
 const binaryMarkets = [
   { question: 'Will Q2 launch ship before June 30?', yes: 62, no: 38, volume: '2,140' },
@@ -31,7 +31,7 @@ const analyzerView = [
 export default function EventDashboard() {
   const { organizationId, eventId } = useParams();
   const [searchParams] = useSearchParams();
-  const userId = searchParams.get('userId');
+  const userId = searchParams.get('userId') || getStoredUserId();
   const [eventData, setEventData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tokens, setTokens] = useState([]);
@@ -43,12 +43,7 @@ export default function EventDashboard() {
       if (!eventId) return;
       setLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/events/${eventId}`);
-        if (!res.ok) {
-          setEventData(null);
-          return;
-        }
-        const data = await res.json();
+        const data = await readJson(`/events/${eventId}`);
         setEventData(data);
       } catch (e) {
         console.error(e);
@@ -65,14 +60,7 @@ export default function EventDashboard() {
       if (!organizationId) return;
       setTokensLoading(true);
       try {
-        const allowedRes = await fetch(
-          `${API_BASE}/dashboard/organizations/${organizationId}/tokens-allowed`
-        );
-        if (!allowedRes.ok) {
-          setTokens([]);
-          return;
-        }
-        const tokenIds = await allowedRes.json();
+        const tokenIds = await readJson(`/dashboard/organizations/${organizationId}/tokens-allowed`);
         if (!Array.isArray(tokenIds) || tokenIds.length === 0) {
           setTokens([]);
           return;
@@ -80,18 +68,15 @@ export default function EventDashboard() {
         const tokenRows = await Promise.all(
           tokenIds.map(async (tokenId) => {
             const [nameRes, descRes, qtyRes] = await Promise.all([
-              fetch(`${API_BASE}/dashboard/organizations/${organizationId}/${tokenId}/token-name`),
-              fetch(`${API_BASE}/dashboard/organizations/${organizationId}/${tokenId}/token-description`),
-              fetch(
-                `${API_BASE}/dashboard/organizations/${organizationId}/${tokenId}/token-quantity${
+              readJson(`/dashboard/organizations/${organizationId}/${tokenId}/token-name`),
+              readJson(`/dashboard/organizations/${organizationId}/${tokenId}/token-description`),
+              readJson(
+                `/dashboard/organizations/${organizationId}/${tokenId}/token-quantity${
                   userId ? `?user_id=${userId}` : ''
                 }`
               ),
             ]);
-            const name = nameRes.ok ? await nameRes.json() : 'Unknown Token';
-            const description = descRes.ok ? await descRes.json() : 'No description available';
-            const quantity = qtyRes.ok ? await qtyRes.json() : 0;
-            return { tokenId, name, description, quantity };
+            return { tokenId, name: nameRes, description: descRes, quantity: qtyRes };
           })
         );
         setTokens(tokenRows);
@@ -112,12 +97,7 @@ export default function EventDashboard() {
         return;
       }
       try {
-        const res = await fetch(`${API_BASE}/dashboard/users/${userId}/organizations`);
-        if (!res.ok) {
-          setRoleView('viewer');
-          return;
-        }
-        const orgs = await res.json();
+        const orgs = await readJson(`/dashboard/users/${userId}/organizations`);
         if (!Array.isArray(orgs)) {
           setRoleView('viewer');
           return;
@@ -175,7 +155,7 @@ export default function EventDashboard() {
         </p>
 
         <div className="event-actions">
-          <Link to={`/organization/${organizationId}`}>Back to organization</Link>
+          <Link to={`/organization/${organizationId}${userId ? `?userId=${userId}` : ''}`}>Back to organization</Link>
         </div>
 
         <section className="event-dashboard-content">

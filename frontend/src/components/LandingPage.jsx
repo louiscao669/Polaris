@@ -1,48 +1,125 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import './LandingPage.css';
+import atSeaImage from '../assets/At_SEA.png';
+import atTradeImage from '../assets/At_TRADE.png';
+import jockeyImage from '../assets/JOCKEY.png';
 
 function LandingPage() {
+  const slides = [
+    { src: jockeyImage, alt: 'Polaris prediction market jockey artwork' },
+    { src: atSeaImage, alt: 'Polaris experience at sea' },
+    { src: atTradeImage, alt: 'Polaris trade market view' },
+  ];
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [expandedSlide, setExpandedSlide] = useState(null);
+
+  const heroMessage = 'Prediction markets for real-time operational intelligence';
+
+  const showPreviousSlide = () => {
+    setActiveSlide((currentSlide) => (currentSlide === 0 ? slides.length - 1 : currentSlide - 1));
+  };
+
+  const showNextSlide = () => {
+    setActiveSlide((currentSlide) => (currentSlide === slides.length - 1 ? 0 : currentSlide + 1));
+  };
+
   return (
-    <div className="scroll-container">
-      <section className="landing-section landing-section--hero blue-bg" aria-label="Introduction">
-        <div className="container landing-section__inner">
-          <h1>Introducing Polaris</h1>
-          <p className="landing-section__tagline">A new way to bet for your organization.</p>
+    <>
+      <section className="landing-hero" aria-label="Polaris introduction">
+        <div className="landing-hero__content">
+          <p className="landing-hero__eyebrow">Prediction markets for organizations</p>
+          <h1 className="landing-hero__title">Polaris</h1>
+          <p className="landing-hero__message">{heroMessage}</p>
+          <div className="landing-hero__actions">
+            <Link className="landing-hero__cta" to="/signup">
+              Try Now
+            </Link>
+            <p className="landing-hero__signin">
+              Already have an account? <Link to="/signin">Sign in</Link>
+            </p>
+          </div>
+        </div>
+
+        <div className="landing-carousel" aria-label="Polaris highlights">
+          <button
+            type="button"
+            className="landing-carousel__arrow landing-carousel__arrow--left"
+            onClick={showPreviousSlide}
+            aria-label="Show previous image"
+          >
+            &#8249;
+          </button>
+
+          <div className="landing-carousel__viewport">
+            <div
+              className="landing-carousel__track"
+              style={{ transform: `translateX(-${activeSlide * 100}%)` }}
+            >
+              {slides.map((slide, index) => (
+                <div className="landing-carousel__slide" key={slide.alt}>
+                  <button
+                    type="button"
+                    className="landing-carousel__image-button"
+                    onClick={() => setExpandedSlide(index)}
+                    aria-label={`Open larger view of image ${index + 1}`}
+                  >
+                    <img className="landing-carousel__image" src={slide.src} alt={slide.alt} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="landing-carousel__arrow landing-carousel__arrow--right"
+            onClick={showNextSlide}
+            aria-label="Show next image"
+          >
+            &#8250;
+          </button>
+
+          <div className="landing-carousel__dots" aria-label="Choose hero image">
+            {slides.map((slide, index) => (
+              <button
+                key={slide.alt}
+                type="button"
+                className={`landing-carousel__dot${index === activeSlide ? ' is-active' : ''}`}
+                onClick={() => setActiveSlide(index)}
+                aria-label={`Show image ${index + 1}`}
+                aria-pressed={index === activeSlide}
+              />
+            ))}
+          </div>
         </div>
       </section>
 
-      <section className="landing-section landing-section--description bg-color" aria-label="Description">
-        <div className="container">
-          <h2 className="landing-section__heading">How it works</h2>
-          <p>
-            The system provides a platform for organizations to understand stakeholders&apos;
-            expectations about issues of organizational interests. In a regular business setting,
-            for instance, to measure the engineer team&apos;s sentiments on the time it will take
-            to complete a given feature, organization leaders request information from managers
-            directly responsible for the projects, creating a chain of information transmission
-            that risks the information loss at different layers. However, our platform enables the
-            leaders to create events such as the status of a feature, which contains markets that
-            the team can directly bet on. All team members are invited and incentivized to make
-            the most likely prediction. This eliminates social desirability bias and ensures
-            honesty. It also removes the need for intermediary reports and enables transparent and
-            data-driven analysis along with real-time events in the organization (e.g. an engineer
-            leaving the team).
-          </p>
-          <p>
-            Specifically, our system allows organization leaders to create events that are open
-            only to users of certain roles within the organization and are given tokens to make the
-            bets. In this exchange betting system, an individual places a black bet in a binary
-            market at a token cost between 0 and 1. If another individual is willing to place a lay
-            bet at the same odds such that the cost of the two bets adds up to 1, they will be
-            matched, and the winner gets the amount, which is 1 token.
-          </p>
-          <p className="landing-section__cta-wrap">
-            <a href="#signup" className="landing-section__cta">
-              Continue to sign up
-            </a>
-          </p>
+      {expandedSlide !== null ? (
+        <div
+          className="landing-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Expanded hero image"
+          onClick={() => setExpandedSlide(null)}
+        >
+          <button
+            type="button"
+            className="landing-lightbox__close"
+            onClick={() => setExpandedSlide(null)}
+            aria-label="Close expanded image"
+          >
+            ×
+          </button>
+          <img
+            className="landing-lightbox__image"
+            src={slides[expandedSlide].src}
+            alt={slides[expandedSlide].alt}
+            onClick={(event) => event.stopPropagation()}
+          />
         </div>
-      </section>
-    </div>
+      ) : null}
+    </>
   );
 }
 

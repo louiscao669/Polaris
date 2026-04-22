@@ -5,7 +5,7 @@ import './Layout.css';
 function Layout({ children, user, homeUrl }) {
   return (
     <div className="layout">
-      <Navbar user={user} homeUrl={homeUrl} />
+      {user?.isAuthenticated ? <Navbar user={user} homeUrl={homeUrl} /> : null}
 
       <div className="page-wrapper">{children}</div>
     </div>

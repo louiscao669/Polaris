@@ -3,8 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import OrganizationMembership from './OrganizationMembership';
-
-const API_BASE = 'http://localhost:8000';
+import { API_BASE, pollOperation, readJson, submitV2Operation } from '../lib/api';
+import { getStoredUserId } from '../lib/auth';
 
 function Organization() { 
   const { organizationId } = useParams();
@@ -21,7 +21,7 @@ function Organization() {
   const [numMarketsLoading, setNumMarketsLoading] = useState(false);
 
   const [searchParams] = useSearchParams();
-  const userId = searchParams.get('userId');
+  const userId = searchParams.get('userId') || getStoredUserId();
 
   const loadOrganization = async () => {
     if (!organizationId) {
@@ -30,14 +30,8 @@ function Organization() {
     }
     setOrgLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/organizations/${organizationId}`);
-      if (res.ok) {
-        const data = await res.json();
+      const data = await readJson(`/organizations/${organizationId}`);
         setOrgData(data);
-      } else {
-        console.error(res.statusText);
-        setOrgData(null);
-      }
     } catch (e) {
       console.error(e);
       setOrgData(null);
@@ -58,11 +52,8 @@ function Organization() {
   
     setNumParticipantsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/dashboard/organizations/${organizationId}/num-participants`);
-      if (res.ok) {
-        const data = await res.json();
-        setNumParticipants(data);
-      }
+      const data = await readJson(`/dashboard/organizations/${organizationId}/num-participants`);
+      setNumParticipants(data);
     } catch (e) {
       console.error(e);
       setNumParticipants(0);
@@ -72,11 +63,8 @@ function Organization() {
 
     setNumEventsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/dashboard/organizations/${organizationId}/num-events`);
-      if (res.ok) {
-        const data = await res.json();
-        setNumEvents(data);
-      }
+      const data = await readJson(`/dashboard/organizations/${organizationId}/num-events`);
+      setNumEvents(data);
     } catch (e) {
       console.error(e);
       setNumEvents(0);
@@ -88,11 +76,8 @@ function Organization() {
     try {
       let numMarkets = 0;
       for (const event of events) {
-        const res = await fetch(`${API_BASE}/dashboard/events/${event.event_id}/num-markets`);
-        if (res.ok) {
-          const data = await res.json();
-          numMarkets += data;
-        }
+        const data = await readJson(`/dashboard/events/${event.event_id}/num-markets`);
+        numMarkets += data;
       }
       setNumMarkets(numMarkets);
     } catch (e) {
@@ -103,13 +88,8 @@ function Organization() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/dashboard/organizations/${organizationId}/total-volume`);
-      if (res.ok) {
-        const data = await res.json();
-        setTotalVolume(Number(data) || 0);
-      } else {
-        setTotalVolume(0);
-      }
+      const data = await readJson(`/dashboard/organizations/${organizationId}/total-volume`);
+      setTotalVolume(Number(data) || 0);
     } catch (e) {
       console.error(e);
       setTotalVolume(0);
@@ -127,13 +107,8 @@ function Organization() {
     }
     setEventsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/organizations/${organizationId}/events`);
-      if (res.ok) {
-        const data = await res.json();
-        setEvents(Array.isArray(data) ? data : []);
-      } else {
-        setEvents([]);
-      }
+      const data = await readJson(`/organizations/${organizationId}/events`);
+      setEvents(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
       setEvents([]);
@@ -159,18 +134,16 @@ function Organization() {
     const eventName = prompt('Enter the name of the new event');
     try {
       if (eventName && userId) {
-        const res = await fetch(`${API_BASE}/events`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: Number(userId),
-            organization_id: Number(organizationId),
-            caption: eventName,
-          }),
+        const op = await submitV2Operation('/events/lifecycle', {
+          action: 'CREATE_EVENT',
+          user_id: Number(userId),
+          organization_id: Number(organizationId),
+          caption: eventName,
         });
-        if (res.ok) {
-          loadOrganizationEvents();
-        }
+        await pollOperation(op.operation_id, {
+          headers: { 'X-Force-Leader': 'true' },
+        });
+        loadOrganizationEvents();
       } else {
         alert('Please login to create a new event');
       }

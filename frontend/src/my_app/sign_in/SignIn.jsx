@@ -19,7 +19,9 @@ import { GoogleIcon, FacebookIcon, SitemarkIcon } from './components/CustomIcons
 import { Link as RouterLink } from 'react-router-dom'; // Alias it here
 import Link from '@mui/material/Link';
 import MuiLink from '@mui/material/Link';
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { postJson } from '../../lib/api';
+import { saveAuth } from '../../lib/auth';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -65,13 +67,14 @@ const SignInContainer = styled(Stack)(({ theme }) => ({
 
 export default function SignIn(props) {
   const navigate = useNavigate();
-  const [emailError, setEmailError] = React.useState(false);
-  const [emailErrorMessage, setEmailErrorMessage] = React.useState('');
+  const location = useLocation();
+  const [usernameError, setUsernameError] = React.useState(false);
+  const [usernameErrorMessage, setUsernameErrorMessage] = React.useState('');
   const [passwordError, setPasswordError] = React.useState(false);
   const [passwordErrorMessage, setPasswordErrorMessage] = React.useState('');
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-  const [serverError, setServerError] = React.useState('');
+  const [serverError, setServerError] = React.useState(location.state?.signupSuccess || '');
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -88,62 +91,48 @@ export default function SignIn(props) {
     setServerError('');
     const data = new FormData(event.currentTarget);
     const payload = {
-      email: String(data.get('email') ?? '').trim(),
+      username: String(data.get('username') ?? '').trim(),
       password: String(data.get('password') ?? ''),
     };
     try {
-      const response = await fetch('http://localhost:8000/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
-      if (response.ok) {
+      const result = await postJson('/users/login', payload);
+      if (result?.user_id != null) {
+        saveAuth({
+          userId: result.user_id,
+          username: payload.username,
+          sessionToken: result.session_token || null,
+          expiresAt: result.expires_at || null,
+        });
         if (result.user_id != null) {
-          navigate('/dashboard', { state: { userId: result.user_id } });
+          navigate(`/dashboard?userId=${result.user_id}`);
         } else {
           navigate('/dashboard');
         }
         return;
       }
-      const detail = result?.detail;
-      const msg =
-        typeof detail === 'string'
-          ? detail
-          : Array.isArray(detail)
-            ? detail.map((d) => d?.msg ?? JSON.stringify(d)).join('; ')
-            : 'Login failed.';
-      setServerError(msg);
-      console.error('Backend validation details:', result.detail);
-      console.error('Login failed:', result.message);
+      setServerError('Login failed.');
     } catch (error) {
-      console.error('Network error or server is down:', error);
-      setServerError('Cannot reach server. Is the API running on http://localhost:8000?');
+      console.error('Login error:', error);
+      setServerError(error?.message || 'Login failed.');
     } finally {
       setLoading(false);
     }
   };
 
   const validateInputs = () => {
-    const email = document.getElementById('email');
+    const username = document.getElementById('username');
     const password = document.getElementById('password');
 
     let isValid = true;
 
-    const idVal = email.value?.trim() ?? '';
+    const idVal = username.value?.trim() ?? '';
     if (!idVal) {
-      setEmailError(true);
-      setEmailErrorMessage('Enter your email.');
-      isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(idVal)) {
-      setEmailError(true);
-      setEmailErrorMessage('Please enter a valid email address.');
+      setUsernameError(true);
+      setUsernameErrorMessage('Enter your username.');
       isValid = false;
     } else {
-      setEmailError(false);
-      setEmailErrorMessage('');
+      setUsernameError(false);
+      setUsernameErrorMessage('');
     }
 
     if (!password.value || password.value.length < 6) {
@@ -187,20 +176,21 @@ export default function SignIn(props) {
             }}
           >
             <FormControl>
-              <FormLabel htmlFor="email">Email</FormLabel>
+              <FormLabel htmlFor="username">Username</FormLabel>
               <TextField
-                error={emailError}
-                helperText={emailErrorMessage}
-                id="email"
-                type="email"
-                name="email"
-                placeholder="you@example.com"
-                autoComplete="email"
+                error={usernameError}
+                helperText={usernameErrorMessage}
+                id="username"
+                type="text"
+                name="username"
+                placeholder="yourusername"
+                autoComplete="username"
                 autoFocus
                 required
                 fullWidth
                 variant="outlined"
-                color={emailError ? 'error' : 'primary'}
+                color={usernameError ? 'error' : 'primary'}
+                defaultValue={location.state?.username || ''}
               />
             </FormControl>
             <FormControl>

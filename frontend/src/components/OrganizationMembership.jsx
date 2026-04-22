@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-
-const API_BASE = 'http://localhost:8000';
+import { readJson } from '../lib/api';
 
 /**
  * Shows whether the current user is an organization leader or a member (from dashboard API).
@@ -18,12 +17,7 @@ export default function OrganizationMembership({ organizationId, userId }) {
       setPhase('loading');
       setRoleId(null);
       try {
-        const res = await fetch(`${API_BASE}/dashboard/users/${userId}/organizations`);
-        if (!res.ok) {
-          if (!cancelled) setPhase('error');
-          return;
-        }
-        const orgs = await res.json();
+        const orgs = await readJson(`/dashboard/users/${userId}/organizations`);
         if (!Array.isArray(orgs)) {
           if (!cancelled) setPhase('error');
           return;

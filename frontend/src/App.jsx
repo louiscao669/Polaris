@@ -13,10 +13,7 @@ function HomePage({ user }) {
   return (
     <Layout user={user} homeUrl="/">
       <LandingPage />
-      <section id="signup" className="signup-section" aria-label="Sign up">
-        <SignUp />
-        <Footer />
-      </section>
+      <Footer />
     </Layout>
   );
 }
@@ -74,7 +71,7 @@ function EventDashboardPage({ user }) {
 }
 
 function App() {
-  const user = { isAuthenticated: true };
+  const user = { isAuthenticated: false };
 
   return (
     <Routes>

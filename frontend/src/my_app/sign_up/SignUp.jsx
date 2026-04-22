@@ -15,6 +15,7 @@ import Stack from '@mui/material/Stack';
 import MuiCard from '@mui/material/Card';
 import { styled, useColorScheme } from '@mui/material/styles';
 import AppTheme from '../shared-theme/AppTheme';
+import { pollOperation, submitV2Operation, formatApiError } from '../../lib/api';
 // import ColorModeSelect from '../shared-theme/ColorModeSelect';
 import { GoogleIcon, FacebookIcon } from './components/CustomIcons';
 
@@ -75,6 +76,7 @@ function SignUpContent() {
   const [passwordError, setPasswordError] = React.useState(false);
   const [passwordErrorMessage, setPasswordErrorMessage] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [serverError, setServerError] = React.useState('');
 
   React.useEffect(() => {
     if (mode !== 'dark') {
@@ -143,32 +145,29 @@ function SignUpContent() {
     event.preventDefault();
     if (!validateInputs()) return;
     setLoading(true);
+    setServerError('');
     const data = new FormData(event.currentTarget);
     const payload = Object.fromEntries(data);
     if (payload.age) {
       payload.age = Number(payload.age);
+    } else {
+      delete payload.age;
     }
     try {
-      const response = await fetch('http://localhost:8000/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      const result = await submitV2Operation('/user/account', {
+        action: 'USER_SIGNUP',
+        ...payload,
       });
-      const result = await response.json();
-      if (!response.ok) {
-        console.error('Backend validation details:', result.detail);
-        console.error('Signup failed:', result.message);
-        return;
-      }
-      if (result.user_id != null) {
-        navigate('/dashboard', { state: { userId: result.user_id } });
-      } else {
-        navigate('/dashboard');
-      }
+      await pollOperation(result.operation_id);
+      navigate('/signin', {
+        state: {
+          signupSuccess: 'Account created. Sign in to continue.',
+          username: payload.username,
+        },
+      });
     } catch (error) {
-      console.error('Network error or server is down:', error);
+      console.error('Signup error:', error);
+      setServerError(error?.message || formatApiError(error, 'Sign up failed.'));
     }finally {
       setLoading(false);
     }
@@ -293,6 +292,14 @@ function SignUpContent() {
             >
               {loading ? 'Signing up...' : 'Sign up'}
             </Button>
+            {serverError ? (
+              <Typography variant="body2" color="error" sx={{ textAlign: 'center' }}>
+                {serverError}
+              </Typography>
+            ) : null}
+            <Typography variant="body2" sx={{ textAlign: 'center', color: 'text.secondary' }}>
+              Sign-up is processed through the live Polaris `/v2` operation queue.
+            </Typography>
           </Box>
           <Divider>
             <Typography sx={{ color: 'text.secondary' }}>or</Typography>
