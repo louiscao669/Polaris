@@ -20,6 +20,16 @@ function buildRoleView(membership) {
   return membership.membership === 'member' ? 'bettor' : 'viewer';
 }
 
+function formatAccessLevel(market, membership) {
+  if (market?.is_leader || membership?.membership === 'leader') {
+    return 'organization leader';
+  }
+  if (market?.role_id) {
+    return String(market.role_id);
+  }
+  return 'viewer';
+}
+
 export default function MarketPage() {
   const { organizationId, eventId, marketId } = useParams();
   const [searchParams] = useSearchParams();
@@ -47,6 +57,7 @@ export default function MarketPage() {
   });
 
   const roleView = buildRoleView(membership);
+  const accessLevelLabel = formatAccessLevel(market, membership);
   const canBet = roleView === 'bettor' || roleView === 'analyzer';
   const canViewAnalytics = roleView === 'analyzer';
   const canManageMarket = !!userId && (market?.is_leader || Number(market?.created_by) === Number(userId));
@@ -426,7 +437,7 @@ export default function MarketPage() {
                   ? allowedTokenIds.map((tokenId) => tokenNameById[String(tokenId)] || `Token #${tokenId}`).join(', ')
                   : 'None'}
               </li>
-              <li>Access role: {market?.role_id || 'viewer'}</li>
+              <li>Access role: {accessLevelLabel}</li>
               <li>Created: {market?.created_at ? new Date(market.created_at).toLocaleString() : 'Unknown'}</li>
               <li>Close at: {market?.close_at ? new Date(market.close_at).toLocaleString() : 'Not scheduled'}</li>
               <li>
