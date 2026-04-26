@@ -14,6 +14,10 @@ from user_utils import (
     validate_credentials,
     validate_user_password,
 )
+try:
+    from app.auth.jwt_codec import mint_access_token
+except ImportError:
+    from backend.event_bus.app.auth.jwt_codec import mint_access_token
 
 def user_login(data: dict[str, Any]):
     username = data.get("username", data.get("login_identifier"))
@@ -54,14 +58,22 @@ def _user_login(cursor, db, username, password):
         if user_row is None:
             return _fail("validation", "Unable to load user profile after login.")
 
-        token, expires_at = create_session(cursor, db, user_id)
+        access_token, expires_at = mint_access_token(
+            user_id=int(user_id),
+            username=user_row[2],
+            first=user_row[0],
+            last=user_row[1],
+        )
+        session_token, _session_expires_at = create_session(cursor, db, user_id)
 
         return {
             "user_id": user_id,
             "first": user_row[0],
             "last": user_row[1],
             "username": user_row[2],
-            "session_token": token,
+            "access_token": access_token,
+            "session_token": session_token,
+            "token_type": "Bearer",
             "expires_at": expires_at,
         }
 
