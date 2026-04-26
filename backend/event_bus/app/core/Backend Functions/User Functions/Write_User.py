@@ -42,10 +42,25 @@ def _user_login(cursor, db, username, password):
         if user_id is None:
             return _fail("auth", "Invalid username or password.")
 
+        cursor.execute(
+            """
+            SELECT first, last, username
+            FROM users
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        user_row = cursor.fetchone()
+        if user_row is None:
+            return _fail("validation", "Unable to load user profile after login.")
+
         token, expires_at = create_session(cursor, db, user_id)
 
         return {
             "user_id": user_id,
+            "first": user_row[0],
+            "last": user_row[1],
+            "username": user_row[2],
             "session_token": token,
             "expires_at": expires_at,
         }

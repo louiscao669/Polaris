@@ -27,3 +27,8 @@ export function getStoredSessionToken() {
   const auth = loadAuth();
   return auth?.sessionToken || null;
 }
+
+export function getStoredFirstName() {
+  const auth = loadAuth();
+  return auth?.firstName || null;
+}

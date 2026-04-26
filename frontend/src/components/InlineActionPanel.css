@@ -1,0 +1,182 @@
+.ui-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ui-action-button,
+.ui-action-link {
+  appearance: none;
+  border-radius: 999px;
+  padding: 0.72rem 1.1rem;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.ui-action-button:hover,
+.ui-action-link:hover {
+  transform: translateY(-1px);
+}
+
+.ui-action-button:focus-visible,
+.ui-action-link:focus-visible,
+.ui-inline-form input:focus-visible,
+.ui-inline-form textarea:focus-visible,
+.ui-inline-form select:focus-visible {
+  outline: 2px solid rgba(160, 214, 255, 0.95);
+  outline-offset: 2px;
+}
+
+.ui-action-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ui-action-button--primary {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(135deg, #f7d794 0%, #f3a953 100%);
+  color: #10233f;
+  box-shadow: 0 18px 35px rgba(8, 18, 36, 0.28);
+}
+
+.ui-action-button--secondary,
+.ui-action-link {
+  border: 1px solid rgba(165, 200, 255, 0.28);
+  background: rgba(11, 27, 49, 0.72);
+  color: #f2f7ff;
+}
+
+.ui-action-button--ghost {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #dce9ff;
+}
+
+.page-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #dce8ff;
+  text-decoration: none;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.page-back-link__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(165, 200, 255, 0.22);
+  background: rgba(11, 27, 49, 0.58);
+  color: #f6f9ff;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.page-back-link:hover .page-back-link__arrow {
+  transform: translateX(-2px);
+  border-color: rgba(196, 220, 255, 0.42);
+  background: rgba(15, 34, 60, 0.85);
+  box-shadow: 0 14px 28px rgba(3, 10, 24, 0.22);
+}
+
+.page-back-link__label {
+  color: #bcd2f7;
+}
+
+.ui-inline-panel {
+  margin-top: 1rem;
+  padding: 1.1rem;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(13, 31, 55, 0.92), rgba(8, 18, 36, 0.97)),
+    rgba(9, 22, 40, 0.78);
+  border: 1px solid rgba(162, 199, 255, 0.18);
+  box-shadow: 0 20px 40px rgba(2, 6, 23, 0.26);
+}
+
+.ui-inline-panel__header h3 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.05rem;
+}
+
+.ui-inline-panel__header p {
+  margin: 0.35rem 0 0;
+  color: #c6d9fb;
+  line-height: 1.55;
+}
+
+.ui-inline-form {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.ui-inline-form__fields {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.ui-inline-form__fields label {
+  display: grid;
+  gap: 0.45rem;
+  color: #e5eefc;
+  font-size: 0.95rem;
+}
+
+.ui-inline-form__fields label[data-span='full'] {
+  grid-column: 1 / -1;
+}
+
+.ui-inline-form input,
+.ui-inline-form textarea,
+.ui-inline-form select {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 14px;
+  border: 1px solid rgba(169, 199, 255, 0.18);
+  background: rgba(6, 15, 29, 0.84);
+  color: #f8fbff;
+  padding: 0.82rem 0.9rem;
+  font: inherit;
+}
+
+.ui-inline-form textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.ui-inline-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+@media (max-width: 700px) {
+  .ui-inline-form__actions {
+    justify-content: stretch;
+  }
+
+  .ui-inline-form__actions .ui-action-button {
+    width: 100%;
+  }
+}

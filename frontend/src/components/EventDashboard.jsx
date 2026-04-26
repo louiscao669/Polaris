@@ -1,10 +1,11 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import './EventDashboard.css';
-import ActionDialog from './ActionDialog';
+import InlineActionPanel from './InlineActionPanel';
 import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
+import { formatConstraintOption, formatRoleOption, readPolicyOptions } from '../lib/policyOptions';
 
 const bettorView = [
   'Active positions and unrealized P/L',
@@ -48,10 +49,14 @@ export default function EventDashboard() {
   const [marketActionError, setMarketActionError] = useState(null);
   const [adminError, setAdminError] = useState(null);
   const [organizationData, setOrganizationData] = useState(null);
-  const [showAddTokenDialog, setShowAddTokenDialog] = useState(false);
-  const [showAddCreatorDialog, setShowAddCreatorDialog] = useState(false);
+  const [activeAdminPanel, setActiveAdminPanel] = useState(null);
+  const [createMarketForm, setCreateMarketForm] = useState({ question: '', description: '' });
+  const [editEventForm, setEditEventForm] = useState({ caption: '' });
+  const [allowRoleForm, setAllowRoleForm] = useState({ roleId: '' });
   const [eventTokenId, setEventTokenId] = useState('');
   const [marketCreatorId, setMarketCreatorId] = useState('');
+  const [eventRuleForm, setEventRuleForm] = useState({ constraintId: '', value: '' });
+  const [policyOptions, setPolicyOptions] = useState({ constraints: [], market_access: [] });
   const numericUserId = Number(userId);
 
   const loadEvent = async () => {
@@ -116,6 +121,30 @@ export default function EventDashboard() {
   useEffect(() => {
     loadMarkets();
   }, [eventId, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPolicyOptions = async () => {
+      try {
+        const data = await readPolicyOptions();
+        if (!cancelled) {
+          setPolicyOptions({
+            constraints: Array.isArray(data?.constraints) ? data.constraints : [],
+            market_access: Array.isArray(data?.market_access) ? data.market_access : [],
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPolicyOptions({ constraints: [], market_access: [] });
+        }
+      }
+    };
+    loadPolicyOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const loadAnalytics = async () => {
@@ -230,17 +259,26 @@ export default function EventDashboard() {
   const canManageEvent = !!eventData?.is_leader && !!eventId && !!userId;
   const organizationTokens = Array.isArray(organizationData?.tokens) ? organizationData.tokens : [];
   const organizationMembers = Array.isArray(organizationData?.members) ? organizationData.members : [];
+  const organizationRoles = Array.isArray(organizationData?.roles) ? organizationData.roles : [];
+  const availableConstraints = Array.isArray(policyOptions?.constraints) ? policyOptions.constraints : [];
   const tokenNameById = Object.fromEntries(
     organizationTokens.map((token) => [String(token.token_id), token.name])
   );
 
+  const openAdminPanel = (panel) => {
+    setAdminError(null);
+    setActiveAdminPanel(panel);
+  };
+
+  const closeAdminPanel = () => {
+    setActiveAdminPanel(null);
+  };
+
   const handleCreateMarket = async () => {
-    const question = window.prompt('Enter the market question');
+    const question = createMarketForm.question.trim();
     if (!question || !eventId || !userId) return;
 
-    const description =
-      window.prompt('Enter a short market description') ||
-      `${question} market for event ${eventId}`;
+    const description = createMarketForm.description.trim() || `${question} market for event ${eventId}`;
 
     setMarketActionError(null);
 
@@ -255,6 +293,8 @@ export default function EventDashboard() {
       await pollOperation(op.operation_id, {
         headers: { 'X-Force-Leader': 'true' },
       });
+      setCreateMarketForm({ question: '', description: '' });
+      closeAdminPanel();
       await loadMarkets();
     } catch (e) {
       console.error(e);
@@ -267,7 +307,7 @@ export default function EventDashboard() {
   };
 
   const handleRenameEvent = async () => {
-    const caption = window.prompt('Event caption', eventData?.caption || '');
+    const caption = editEventForm.caption.trim();
     if (!caption || !canManageEvent) return;
     setAdminError(null);
     try {
@@ -275,6 +315,7 @@ export default function EventDashboard() {
         user_id: Number(userId),
         caption,
       });
+      closeAdminPanel();
       await loadEvent();
     } catch (error) {
       console.error(error);
@@ -283,7 +324,7 @@ export default function EventDashboard() {
   };
 
   const handleAllowRole = async () => {
-    const roleId = window.prompt('Role id allowed to view this event');
+    const roleId = allowRoleForm.roleId;
     if (!roleId || !canManageEvent) return;
     setAdminError(null);
     try {
@@ -292,6 +333,7 @@ export default function EventDashboard() {
         event_id: Number(eventId),
         role_id: roleId,
       });
+      closeAdminPanel();
       await loadEvent();
     } catch (error) {
       console.error(error);
@@ -302,7 +344,7 @@ export default function EventDashboard() {
   const handleAddEventToken = async () => {
     if (!canManageEvent) return;
     setEventTokenId(String(organizationTokens[0]?.token_id || ''));
-    setShowAddTokenDialog(true);
+    openAdminPanel('add-token');
   };
 
   const submitAddEventToken = async () => {
@@ -314,7 +356,7 @@ export default function EventDashboard() {
         event_id: Number(eventId),
         token_id: Number(eventTokenId),
       });
-      setShowAddTokenDialog(false);
+      closeAdminPanel();
       await loadEvent();
     } catch (error) {
       console.error(error);
@@ -325,7 +367,7 @@ export default function EventDashboard() {
   const handleAddMarketCreator = async () => {
     if (!canManageEvent) return;
     setMarketCreatorId(String(organizationMembers[0]?.user_id || ''));
-    setShowAddCreatorDialog(true);
+    openAdminPanel('add-creator');
   };
 
   const submitAddMarketCreator = async () => {
@@ -337,7 +379,7 @@ export default function EventDashboard() {
         event_id: Number(eventId),
         market_creator_id: Number(marketCreatorId),
       });
-      setShowAddCreatorDialog(false);
+      closeAdminPanel();
       await loadEvent();
     } catch (error) {
       console.error(error);
@@ -346,10 +388,8 @@ export default function EventDashboard() {
   };
 
   const handleAddEventRule = async () => {
-    const constraintId = window.prompt(
-      'Constraint id for the event rule (for example, a configured max-spend rule id)'
-    );
-    const value = window.prompt('Constraint value');
+    const constraintId = eventRuleForm.constraintId;
+    const value = eventRuleForm.value;
     if (!constraintId || !value || !canManageEvent) return;
     setAdminError(null);
     try {
@@ -359,6 +399,8 @@ export default function EventDashboard() {
         constraint_id: Number(constraintId),
         value: Number(value),
       });
+      setEventRuleForm({ constraintId: '', value: '' });
+      closeAdminPanel();
       await loadEvent();
     } catch (error) {
       console.error(error);
@@ -379,23 +421,281 @@ export default function EventDashboard() {
             : 'Open an event from the organization dashboard to see details here.'}
         </p>
 
-        <div className="event-actions">
-          <Link to={`/organization/${organizationId}${userId ? `?userId=${userId}` : ''}`}>Back to organization</Link>
-          {canCreateMarket && (
-            <button type="button" className="analyze-btn" onClick={handleCreateMarket}>
-              Create Market
-            </button>
-          )}
+        <div className="event-nav">
+          <Link
+            className="page-back-link"
+            to={`/organization/${organizationId}${userId ? `?userId=${userId}` : ''}`}
+            aria-label="Back to organization"
+          >
+            <span className="page-back-link__arrow" aria-hidden="true">
+              {'<'}
+            </span>
+            <span className="page-back-link__label">Organization</span>
+          </Link>
+        </div>
+        <div className="event-action-groups">
+          <section className="event-action-group">
+            <div className="event-action-group__header">
+              <span>Event actions</span>
+              <p>Core actions for creating and reviewing markets in this event.</p>
+            </div>
+            <div className="event-actions ui-action-bar">
+              {canCreateMarket && (
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--primary"
+                  onClick={() => {
+                    setCreateMarketForm({ question: '', description: '' });
+                    openAdminPanel('create-market');
+                  }}
+                >
+                  Create market
+                </button>
+              )}
+            </div>
+          </section>
           {canManageEvent && (
-            <>
-              <button type="button" className="analyze-btn" onClick={handleRenameEvent}>Edit Event</button>
-              <button type="button" className="analyze-btn" onClick={handleAllowRole}>Allow Role</button>
-              <button type="button" className="analyze-btn" onClick={handleAddEventToken}>Add Token</button>
-              <button type="button" className="analyze-btn" onClick={handleAddMarketCreator}>Add Market Creator</button>
-              <button type="button" className="analyze-btn" onClick={handleAddEventRule}>Add Rule</button>
-            </>
+            <section className="event-action-group event-action-group--owner">
+              <div className="event-action-group__header">
+                <span>Owner actions</span>
+                <p>Manage access, permissions, and event-level configuration.</p>
+              </div>
+              <div className="event-actions ui-action-bar">
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={() => {
+                    setEditEventForm({ caption: eventData?.caption || '' });
+                    openAdminPanel('edit-event');
+                  }}
+                >
+                  Edit event
+                </button>
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={() => {
+                    setAllowRoleForm({ roleId: organizationRoles[0]?.role_id || '' });
+                    openAdminPanel('allow-role');
+                  }}
+                >
+                  Allow role
+                </button>
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={handleAddEventToken}
+                >
+                  Add token
+                </button>
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={handleAddMarketCreator}
+                >
+                  Add market creator
+                </button>
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={() => {
+                    setEventRuleForm({
+                      constraintId: String(availableConstraints[0]?.constraint_id || ''),
+                      value: '',
+                    });
+                    openAdminPanel('add-rule');
+                  }}
+                >
+                  Add rule
+                </button>
+              </div>
+            </section>
           )}
         </div>
+        {activeAdminPanel === 'create-market' && (
+          <InlineActionPanel
+            title="Create market"
+            description="Define a new market directly inside the event dashboard."
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleCreateMarket();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Create market"
+            submitDisabled={!createMarketForm.question.trim()}
+          >
+            <label>
+              Market question
+              <input
+                type="text"
+                value={createMarketForm.question}
+                onChange={(event) =>
+                  setCreateMarketForm((current) => ({ ...current, question: event.target.value }))
+                }
+                placeholder="Will Polaris daily active users exceed 1,000 by June 1?"
+              />
+            </label>
+            <label data-span="full">
+              Description
+              <textarea
+                value={createMarketForm.description}
+                onChange={(event) =>
+                  setCreateMarketForm((current) => ({ ...current, description: event.target.value }))
+                }
+                placeholder="Add context for traders and reviewers."
+              />
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'edit-event' && (
+          <InlineActionPanel
+            title="Edit event"
+            description="Rename the event without breaking flow."
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleRenameEvent();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Save event"
+            submitDisabled={!editEventForm.caption.trim()}
+          >
+            <label data-span="full">
+              Event caption
+              <input
+                type="text"
+                value={editEventForm.caption}
+                onChange={(event) => setEditEventForm({ caption: event.target.value })}
+              />
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'allow-role' && (
+          <InlineActionPanel
+            title="Allow role"
+            description="Grant event visibility to one of the organization roles."
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleAllowRole();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Allow role"
+            submitDisabled={!allowRoleForm.roleId}
+          >
+            <label data-span="full">
+              Role
+              <select
+                value={allowRoleForm.roleId}
+                onChange={(event) => setAllowRoleForm({ roleId: event.target.value })}
+              >
+                <option value="" disabled>
+                  Select a role
+                </option>
+                {organizationRoles.map((role) => (
+                  <option key={role.role_id} value={role.role_id}>
+                    {formatRoleOption(role)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'add-token' && (
+          <InlineActionPanel
+            title="Add event token"
+            description="Choose an organization token to enable for this event."
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitAddEventToken();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Add token"
+            submitDisabled={!eventTokenId}
+          >
+            <label data-span="full">
+              Token
+              <select value={eventTokenId} onChange={(event) => setEventTokenId(event.target.value)}>
+                <option value="" disabled>
+                  Select a token
+                </option>
+                {organizationTokens.map((token) => (
+                  <option key={token.token_id} value={String(token.token_id)}>
+                    {token.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'add-creator' && (
+          <InlineActionPanel
+            title="Add market creator"
+            description="Authorize one of the organization members to create markets for this event."
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitAddMarketCreator();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Add creator"
+            submitDisabled={!marketCreatorId}
+          >
+            <label data-span="full">
+              Member
+              <select value={marketCreatorId} onChange={(event) => setMarketCreatorId(event.target.value)}>
+                <option value="" disabled>
+                  Select a member
+                </option>
+                {organizationMembers.map((member) => (
+                  <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
+                    {formatMemberLabel(member)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'add-rule' && (
+          <InlineActionPanel
+            title="Add event rule"
+            description="Attach a constraint id and value without a popup."
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleAddEventRule();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Add rule"
+            submitDisabled={!eventRuleForm.constraintId || !eventRuleForm.value}
+          >
+            <label>
+              Constraint
+              <select
+                value={eventRuleForm.constraintId}
+                onChange={(event) =>
+                  setEventRuleForm((current) => ({ ...current, constraintId: event.target.value }))
+                }
+              >
+                <option value="" disabled>
+                  Select a constraint
+                </option>
+                {availableConstraints.map((constraint) => (
+                  <option key={constraint.constraint_id} value={String(constraint.constraint_id)}>
+                    {formatConstraintOption(constraint)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Value
+              <input
+                type="number"
+                step="1"
+                value={eventRuleForm.value}
+                onChange={(event) =>
+                  setEventRuleForm((current) => ({ ...current, value: event.target.value }))
+                }
+              />
+            </label>
+          </InlineActionPanel>
+        )}
         {marketActionError && <p className="event-muted">{marketActionError}</p>}
         {adminError && <p className="event-muted">{adminError}</p>}
 
@@ -445,7 +745,7 @@ export default function EventDashboard() {
               {roleView === 'analyzer' && (
                 <button
                   type="button"
-                  className="analyze-btn"
+                  className="ui-action-button ui-action-button--secondary"
                   onClick={() => setShowAnalytics((value) => !value)}
                 >
                   {showAnalytics ? 'Hide Market Analytics' : 'Analyze Event Performance'}
@@ -512,54 +812,6 @@ export default function EventDashboard() {
           )}
         </section>
       </div>
-      {showAddTokenDialog && (
-        <ActionDialog
-          title="Add Event Token"
-          description="Choose a token by name instead of typing the token id."
-          onClose={() => setShowAddTokenDialog(false)}
-          onSubmit={submitAddEventToken}
-          submitLabel="Add Token"
-          submitDisabled={!eventTokenId}
-        >
-          <label>
-            Token
-            <select value={eventTokenId} onChange={(event) => setEventTokenId(event.target.value)}>
-              <option value="" disabled>
-                Select a token
-              </option>
-              {organizationTokens.map((token) => (
-                <option key={token.token_id} value={String(token.token_id)}>
-                  {token.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </ActionDialog>
-      )}
-      {showAddCreatorDialog && (
-        <ActionDialog
-          title="Add Market Creator"
-          description="Choose the authorized user by name. Polaris will use the underlying user id."
-          onClose={() => setShowAddCreatorDialog(false)}
-          onSubmit={submitAddMarketCreator}
-          submitLabel="Add Creator"
-          submitDisabled={!marketCreatorId}
-        >
-          <label>
-            User
-            <select value={marketCreatorId} onChange={(event) => setMarketCreatorId(event.target.value)}>
-              <option value="" disabled>
-                Select a member
-              </option>
-              {organizationMembers.map((member) => (
-                <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
-                  {formatMemberLabel(member)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </ActionDialog>
-      )}
     </section>
   );
 }

@@ -1,24 +1,18 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import './MarketPage.css';
-import ActionDialog from './ActionDialog';
+import InlineActionPanel from './InlineActionPanel';
 import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
-
-function buildRoleView(membership) {
-  if (!membership) return 'viewer';
-  if (membership.membership === 'leader') return 'analyzer';
-  const normalizedRole = String(membership.role_id || '').toLowerCase();
-  if (
-    normalizedRole.includes('stat') ||
-    normalizedRole.includes('analyst') ||
-    normalizedRole.includes('analytics')
-  ) {
-    return 'analyzer';
-  }
-  return membership.membership === 'member' ? 'bettor' : 'viewer';
-}
+import {
+  formatConstraintOption,
+  formatMarketAccessOption,
+  formatRoleOption,
+  getMarketAccessLabel,
+  getMarketAccessView,
+  readPolicyOptions,
+} from '../lib/policyOptions';
 
 function formatAccessLevel(market, membership) {
   if (market?.is_leader || membership?.membership === 'leader') {
@@ -49,8 +43,13 @@ export default function MarketPage() {
   const [analytics, setAnalytics] = useState(null);
   const [adminError, setAdminError] = useState(null);
   const [organizationData, setOrganizationData] = useState(null);
-  const [showAddTokenDialog, setShowAddTokenDialog] = useState(false);
+  const [activeAdminPanel, setActiveAdminPanel] = useState(null);
+  const [editMarketForm, setEditMarketForm] = useState({ question: '' });
   const [marketTokenId, setMarketTokenId] = useState('');
+  const [allowRoleForm, setAllowRoleForm] = useState({ roleId: '', asId: '' });
+  const [resolveMarketForm, setResolveMarketForm] = useState({ outcome: 'YES' });
+  const [marketRuleForm, setMarketRuleForm] = useState({ constraintId: '', value: '' });
+  const [policyOptions, setPolicyOptions] = useState({ constraints: [], market_access: [] });
   const [tradeForm, setTradeForm] = useState({
     transactionType: 'BUY',
     side: 'YES',
@@ -58,9 +57,19 @@ export default function MarketPage() {
     tokenId: '',
   });
 
-  const roleView = buildRoleView(membership);
-  const accessLevelLabel = formatAccessLevel(market, membership);
-  const canBet = roleView === 'bettor' || roleView === 'analyzer';
+  const matchingAccessRole = useMemo(() => {
+    if (membership?.membership === 'leader') {
+      return { as_id: 'analytic' };
+    }
+    if (!membership?.role_id || !Array.isArray(market?.access_roles)) {
+      return null;
+    }
+    return (
+      market.access_roles.find((entry) => String(entry.role_id) === String(membership.role_id)) || null
+    );
+  }, [membership, market]);
+  const roleView = getMarketAccessView(matchingAccessRole?.as_id);
+  const canBet = roleView === 'bettor';
   const canViewAnalytics = roleView === 'analyzer';
   const canManageMarket = !!userId && (market?.is_leader || Number(market?.created_by) === Number(userId));
 
@@ -85,6 +94,42 @@ export default function MarketPage() {
       ),
     [organizationMembers]
   );
+  const organizationRoles = Array.isArray(organizationData?.roles) ? organizationData.roles : [];
+  const availableConstraints = Array.isArray(policyOptions?.constraints) ? policyOptions.constraints : [];
+  const availableMarketAccess = Array.isArray(policyOptions?.market_access) ? policyOptions.market_access : [];
+
+  const roleNameById = useMemo(
+    () =>
+      Object.fromEntries(
+        organizationRoles.map((role) => [String(role.role_id), role.description || role.role_id])
+      ),
+    [organizationRoles]
+  );
+  const accessLevelLabel = useMemo(() => {
+    if (market?.is_leader || membership?.membership === 'leader') {
+      return 'organization leader';
+    }
+    if (market?.role_id) {
+      const roleName = roleNameById[String(market.role_id)] || String(market.role_id);
+      const matchingAccess = Array.isArray(market?.access_roles)
+        ? market.access_roles.find((entry) => String(entry.role_id) === String(market.role_id))
+        : null;
+      const accessDescription = matchingAccess?.as_id
+        ? getMarketAccessLabel(String(matchingAccess.as_id))
+        : null;
+      return accessDescription ? `${roleName} (${accessDescription})` : roleName;
+    }
+    return formatAccessLevel(market, membership);
+  }, [market, membership, roleNameById]);
+
+  const openAdminPanel = (panel) => {
+    setAdminError(null);
+    setActiveAdminPanel(panel);
+  };
+
+  const closeAdminPanel = () => {
+    setActiveAdminPanel(null);
+  };
 
   useEffect(() => {
     if (!userId) return;
@@ -111,6 +156,30 @@ export default function MarketPage() {
       cancelled = true;
     };
   }, [organizationId, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPolicyOptions = async () => {
+      try {
+        const data = await readPolicyOptions();
+        if (!cancelled) {
+          setPolicyOptions({
+            constraints: Array.isArray(data?.constraints) ? data.constraints : [],
+            market_access: Array.isArray(data?.market_access) ? data.market_access : [],
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPolicyOptions({ constraints: [], market_access: [] });
+        }
+      }
+    };
+    loadPolicyOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!marketId || !userId) return;
@@ -292,7 +361,7 @@ export default function MarketPage() {
   };
 
   const handleRenameMarket = async () => {
-    const question = window.prompt('Market question', market?.question || '');
+    const question = editMarketForm.question.trim();
     if (!question || !canManageMarket) return;
     setAdminError(null);
     try {
@@ -300,6 +369,7 @@ export default function MarketPage() {
         user_id: Number(userId),
         question,
       });
+      closeAdminPanel();
       await refreshAfterTrade();
     } catch (error) {
       console.error(error);
@@ -310,7 +380,7 @@ export default function MarketPage() {
   const handleAddMarketToken = async () => {
     if (!canManageMarket) return;
     setMarketTokenId(String(organizationTokens[0]?.token_id || ''));
-    setShowAddTokenDialog(true);
+    openAdminPanel('add-token');
   };
 
   const submitAddMarketToken = async () => {
@@ -322,7 +392,7 @@ export default function MarketPage() {
         market_id: Number(marketId),
         token_id: Number(marketTokenId),
       });
-      setShowAddTokenDialog(false);
+      closeAdminPanel();
       await refreshAfterTrade();
     } catch (error) {
       console.error(error);
@@ -331,9 +401,9 @@ export default function MarketPage() {
   };
 
   const handleAllowMarketRole = async () => {
-    const roleId = window.prompt('Role id allowed in this market');
+    const roleId = allowRoleForm.roleId;
     if (!roleId || !canManageMarket) return;
-    const asId = window.prompt('Access level (as_id / market_as code)');
+    const asId = allowRoleForm.asId.trim();
     if (!asId) return;
     setAdminError(null);
     try {
@@ -343,6 +413,7 @@ export default function MarketPage() {
         role_id: roleId,
         as_id: asId,
       });
+      closeAdminPanel();
       await refreshAfterTrade();
     } catch (error) {
       console.error(error);
@@ -351,7 +422,7 @@ export default function MarketPage() {
   };
 
   const handleResolveMarket = async () => {
-    const outcome = window.prompt('Resolve market to YES or NO');
+    const outcome = resolveMarketForm.outcome;
     if (!outcome || !canManageMarket) return;
     const normalized = outcome.trim().toUpperCase();
     if (!['YES', 'NO', 'TRUE', 'FALSE'].includes(normalized)) {
@@ -365,6 +436,7 @@ export default function MarketPage() {
         market_id: Number(marketId),
         result: normalized === 'YES' || normalized === 'TRUE',
       });
+      closeAdminPanel();
       await refreshAfterTrade();
     } catch (error) {
       console.error(error);
@@ -373,10 +445,8 @@ export default function MarketPage() {
   };
 
   const handleAddMarketRule = async () => {
-    const constraintId = window.prompt(
-      'Constraint id for the market rule (for example, a configured max-spend rule id)'
-    );
-    const value = window.prompt('Constraint value');
+    const constraintId = marketRuleForm.constraintId;
+    const value = marketRuleForm.value;
     if (!constraintId || !value || !canManageMarket) return;
     setAdminError(null);
     try {
@@ -386,6 +456,8 @@ export default function MarketPage() {
         constraint_id: Number(constraintId),
         value: Number(value),
       });
+      setMarketRuleForm({ constraintId: '', value: '' });
+      closeAdminPanel();
       await refreshAfterTrade();
     } catch (error) {
       console.error(error);
@@ -396,29 +468,269 @@ export default function MarketPage() {
   return (
     <section className="market-page" aria-label="Market page">
       <div className="market-shell">
-        <div className="market-actions">
-          <Link to={`/organization/${organizationId}/events/${eventId}${userId ? `?userId=${userId}` : ''}`}>
-            Back to event
+        <div className="market-nav">
+          <Link
+            className="page-back-link"
+            to={`/organization/${organizationId}/events/${eventId}${userId ? `?userId=${userId}` : ''}`}
+            aria-label="Back to event"
+          >
+            <span className="page-back-link__arrow" aria-hidden="true">
+              {'<'}
+            </span>
+            <span className="page-back-link__label">Event</span>
           </Link>
-          {canViewAnalytics && (
-            <button
-              type="button"
-              className="market-toggle"
-              onClick={() => setShowAnalytics((value) => !value)}
-            >
-              {showAnalytics ? 'Hide Analytics' : 'View Analytics'}
-            </button>
-          )}
+        </div>
+        <div className="market-action-groups">
+          <section className="market-action-group">
+            <div className="market-action-group__header">
+              <span>Market actions</span>
+              <p>Review the live forecast and switch between trading and analytics tools.</p>
+            </div>
+            <div className="market-actions">
+              {canViewAnalytics && (
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={() => setShowAnalytics((value) => !value)}
+                >
+                  {showAnalytics ? 'Hide analytics' : 'View analytics'}
+                </button>
+              )}
+            </div>
+          </section>
           {canManageMarket && (
-            <>
-              <button type="button" className="market-toggle" onClick={handleRenameMarket}>Edit Market</button>
-              <button type="button" className="market-toggle" onClick={handleAddMarketToken}>Add Token</button>
-              <button type="button" className="market-toggle" onClick={handleAllowMarketRole}>Allow Role</button>
-              <button type="button" className="market-toggle" onClick={handleAddMarketRule}>Add Rule</button>
-              <button type="button" className="market-toggle" onClick={handleResolveMarket}>Resolve</button>
-            </>
+            <section className="market-action-group market-action-group--owner">
+              <div className="market-action-group__header">
+                <span>Owner actions</span>
+                <p>Change market settings, access designations, and final resolution.</p>
+              </div>
+              <div className="market-actions">
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={() => {
+                    setEditMarketForm({ question: market?.question || '' });
+                    openAdminPanel('edit-market');
+                  }}
+                >
+                  Edit market
+                </button>
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={handleAddMarketToken}
+                >
+                  Add token
+                </button>
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={() => {
+                    setAllowRoleForm({
+                      roleId: organizationRoles[0]?.role_id || '',
+                      asId:
+                        (Array.isArray(market?.access_roles) && market.access_roles[0]?.as_id) ||
+                        availableMarketAccess[0]?.as_code ||
+                        '',
+                    });
+                    openAdminPanel('allow-role');
+                  }}
+                >
+                  Designate role
+                </button>
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--secondary"
+                  onClick={() => {
+                    setMarketRuleForm({
+                      constraintId: String(availableConstraints[0]?.constraint_id || ''),
+                      value: '',
+                    });
+                    openAdminPanel('add-rule');
+                  }}
+                >
+                  Add rule
+                </button>
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--primary"
+                  onClick={() => {
+                    setResolveMarketForm({ outcome: 'YES' });
+                    openAdminPanel('resolve-market');
+                  }}
+                >
+                  Resolve
+                </button>
+              </div>
+            </section>
           )}
         </div>
+        {activeAdminPanel === 'edit-market' && (
+          <InlineActionPanel
+            title="Edit market"
+            description="Update the market question from the same screen where you monitor and trade it."
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleRenameMarket();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Save market"
+            submitDisabled={!editMarketForm.question.trim()}
+          >
+            <label data-span="full">
+              Market question
+              <input
+                type="text"
+                value={editMarketForm.question}
+                onChange={(event) => setEditMarketForm({ question: event.target.value })}
+              />
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'add-token' && (
+          <InlineActionPanel
+            title="Add market token"
+            description="Choose which organization token can be used in this market."
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitAddMarketToken();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Add token"
+            submitDisabled={!marketTokenId}
+          >
+            <label data-span="full">
+              Token
+              <select value={marketTokenId} onChange={(event) => setMarketTokenId(event.target.value)}>
+                <option value="" disabled>
+                  Select a token
+                </option>
+                {organizationTokens.map((token) => (
+                  <option key={token.token_id} value={String(token.token_id)}>
+                    {token.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'allow-role' && (
+          <InlineActionPanel
+            title="Designate market role"
+            description="Choose an organization role, then designate it as Better, Analyzer, or Viewer for this market."
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleAllowMarketRole();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Save designation"
+            submitDisabled={!allowRoleForm.roleId || !allowRoleForm.asId.trim()}
+          >
+            <label>
+              Role
+              <select
+                value={allowRoleForm.roleId}
+                onChange={(event) =>
+                  setAllowRoleForm((current) => ({ ...current, roleId: event.target.value }))
+                }
+              >
+                <option value="" disabled>
+                  Select a role
+                </option>
+                {organizationRoles.map((role) => (
+                  <option key={role.role_id} value={role.role_id}>
+                    {formatRoleOption(role)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Designation
+              <select
+                value={allowRoleForm.asId}
+                onChange={(event) =>
+                  setAllowRoleForm((current) => ({ ...current, asId: event.target.value }))
+                }
+              >
+                <option value="" disabled>
+                  Select market access
+                </option>
+                {availableMarketAccess.map((option) => (
+                  <option key={option.as_code} value={option.as_code}>
+                    {formatMarketAccessOption(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'add-rule' && (
+          <InlineActionPanel
+            title="Add market rule"
+            description="Attach a constraint id and value without a modal interruption."
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleAddMarketRule();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Add rule"
+            submitDisabled={!marketRuleForm.constraintId || !marketRuleForm.value}
+          >
+            <label>
+              Constraint
+              <select
+                value={marketRuleForm.constraintId}
+                onChange={(event) =>
+                  setMarketRuleForm((current) => ({ ...current, constraintId: event.target.value }))
+                }
+              >
+                <option value="" disabled>
+                  Select a constraint
+                </option>
+                {availableConstraints.map((constraint) => (
+                  <option key={constraint.constraint_id} value={String(constraint.constraint_id)}>
+                    {formatConstraintOption(constraint)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Value
+              <input
+                type="number"
+                step="1"
+                value={marketRuleForm.value}
+                onChange={(event) =>
+                  setMarketRuleForm((current) => ({ ...current, value: event.target.value }))
+                }
+              />
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'resolve-market' && (
+          <InlineActionPanel
+            title="Resolve market"
+            description="Finalize the result here so users never have to bounce through prompts."
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleResolveMarket();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Resolve market"
+            submitDisabled={!resolveMarketForm.outcome}
+          >
+            <label data-span="full">
+              Outcome
+              <select
+                value={resolveMarketForm.outcome}
+                onChange={(event) => setResolveMarketForm({ outcome: event.target.value })}
+              >
+                <option value="YES">YES</option>
+                <option value="NO">NO</option>
+              </select>
+            </label>
+          </InlineActionPanel>
+        )}
         {adminError && <p className="market-error">{adminError}</p>}
 
         <header className="market-hero">
@@ -500,7 +812,11 @@ export default function MarketPage() {
                     ))}
                   </select>
                 </label>
-                <button type="submit" className="market-submit" disabled={tradeSubmitting || !tradeForm.tokenId}>
+                <button
+                  type="submit"
+                  className="ui-action-button ui-action-button--primary"
+                  disabled={tradeSubmitting || !tradeForm.tokenId}
+                >
                   {tradeSubmitting ? 'Submitting…' : 'Place Trade'}
                 </button>
                 {tradeError && <p className="market-error">{tradeError}</p>}
@@ -563,30 +879,6 @@ export default function MarketPage() {
           </section>
         )}
       </div>
-      {showAddTokenDialog && (
-        <ActionDialog
-          title="Add Market Token"
-          description="Choose the token by name and Polaris will send the right token id."
-          onClose={() => setShowAddTokenDialog(false)}
-          onSubmit={submitAddMarketToken}
-          submitLabel="Add Token"
-          submitDisabled={!marketTokenId}
-        >
-          <label>
-            Token
-            <select value={marketTokenId} onChange={(event) => setMarketTokenId(event.target.value)}>
-              <option value="" disabled>
-                Select a token
-              </option>
-              {organizationTokens.map((token) => (
-                <option key={token.token_id} value={String(token.token_id)}>
-                  {token.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </ActionDialog>
-      )}
     </section>
   );
 }

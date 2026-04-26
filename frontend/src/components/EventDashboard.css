@@ -28,17 +28,49 @@
   color: #d4e2ff;
 }
 
-.event-actions {
+.event-nav {
   margin-top: 1rem;
 }
 
-.event-actions a {
-  color: #90b6ff;
-  text-decoration: none;
+.event-action-groups {
+  display: grid;
+  gap: 0.95rem;
+  margin-top: 1rem;
 }
 
-.event-actions a:hover {
-  text-decoration: underline;
+.event-action-group {
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(6, 18, 34, 0.42);
+  border: 1px solid rgba(164, 197, 255, 0.12);
+}
+
+.event-action-group--owner {
+  background: rgba(9, 22, 40, 0.62);
+}
+
+.event-action-group__header {
+  margin-bottom: 0.8rem;
+}
+
+.event-action-group__header span {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9fc1ff;
+}
+
+.event-action-group__header p {
+  margin-top: 0.3rem;
+  color: #c2d6fb;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.event-actions {
+  align-items: center;
 }
 
 .event-dashboard-content {
@@ -157,17 +189,6 @@
   padding: 0.45rem 0;
   border-bottom: 0;
   color: #d4e2ff;
-}
-
-.analyze-btn {
-  margin-top: 0.8rem;
-  border: 0;
-  border-radius: 10px;
-  padding: 0.55rem 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  color: #0c2340;
-  background: #ffffff;
 }
 
 .event-card--tokens {

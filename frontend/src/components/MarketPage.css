@@ -9,25 +9,52 @@
   gap: 1.5rem;
 }
 
+.market-nav {
+  display: flex;
+  align-items: center;
+}
+
+.market-action-groups {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.market-action-group {
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(6, 18, 34, 0.42);
+  border: 1px solid rgba(164, 197, 255, 0.12);
+}
+
+.market-action-group--owner {
+  background: rgba(9, 22, 40, 0.62);
+}
+
+.market-action-group__header {
+  margin-bottom: 0.8rem;
+}
+
+.market-action-group__header span {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9fc1ff;
+}
+
+.market-action-group__header p {
+  margin-top: 0.3rem;
+  color: #c2d6fb;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
 .market-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
-}
-
-.market-actions a,
-.market-toggle {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  padding: 0.7rem 1rem;
-  background: rgba(18, 28, 44, 0.65);
-  color: #f5f7fb;
-  text-decoration: none;
-}
-
-.market-toggle {
-  cursor: pointer;
 }
 
 .market-hero,
@@ -79,18 +106,7 @@
   padding: 0.8rem 0.9rem;
 }
 
-.market-submit {
-  border: 0;
-  border-radius: 14px;
-  padding: 0.9rem 1.1rem;
-  background: linear-gradient(135deg, #38bdf8, #0f766e);
-  color: #02111f;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.market-submit:disabled,
-.market-toggle:disabled {
+.ui-action-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

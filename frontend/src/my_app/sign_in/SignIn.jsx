@@ -99,7 +99,9 @@ export default function SignIn(props) {
       if (result?.user_id != null) {
         saveAuth({
           userId: result.user_id,
-          username: payload.username,
+          username: result.username || payload.username,
+          firstName: result.first || null,
+          lastName: result.last || null,
           sessionToken: result.session_token || null,
           expiresAt: result.expires_at || null,
         });

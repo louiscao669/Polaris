@@ -1,11 +1,12 @@
 import './Organization.css';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import OrganizationMembership from './OrganizationMembership';
-import ActionDialog from './ActionDialog';
+import InlineActionPanel from './InlineActionPanel';
 import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
+import { formatRoleOption } from '../lib/policyOptions';
 
 function formatMemberLabel(member) {
   const fullName = [member?.first, member?.last].filter(Boolean).join(' ').trim();
@@ -16,6 +17,7 @@ function formatMemberLabel(member) {
 }
 
 function Organization() { 
+  const navigate = useNavigate();
   const { organizationId } = useParams();
   const normalizedOrganizationId = (() => {
     const parsed = Number(organizationId);
@@ -33,10 +35,14 @@ function Organization() {
   const [numEventsLoading, setNumEventsLoading] = useState(false);
   const [numMarketsLoading, setNumMarketsLoading] = useState(false);
   const [adminError, setAdminError] = useState(null);
+  const [activeAdminPanel, setActiveAdminPanel] = useState(null);
+  const [createEventForm, setCreateEventForm] = useState({ name: '' });
+  const [editOrganizationForm, setEditOrganizationForm] = useState({ name: '', description: '' });
+  const [createRoleForm, setCreateRoleForm] = useState({ name: '', description: '' });
+  const [createTokenForm, setCreateTokenForm] = useState({ name: '', description: '' });
   const [assignRoleForm, setAssignRoleForm] = useState({ targetUserId: '', roleId: '' });
   const [grantTokensForm, setGrantTokensForm] = useState({ targetUserId: '', tokenId: '', qty: '1' });
-  const [showAssignRoleDialog, setShowAssignRoleDialog] = useState(false);
-  const [showGrantTokensDialog, setShowGrantTokensDialog] = useState(false);
+  const [removeMemberForm, setRemoveMemberForm] = useState({ targetUserId: '' });
 
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId') || getStoredUserId();
@@ -133,48 +139,60 @@ function Organization() {
   ];
 
   const canManageOrganization = !!orgData?.is_leader && !!userId && normalizedOrganizationId != null;
+  const canLeaveOrganization =
+    !!userId && normalizedOrganizationId != null && !!orgData?.role_id && !orgData?.is_leader;
   const availableMembers = Array.isArray(orgData?.members) ? orgData.members : [];
   const availableRoles = Array.isArray(orgData?.roles) ? orgData.roles : [];
   const availableTokens = Array.isArray(orgData?.tokens) ? orgData.tokens : [];
+  const removableMembers = availableMembers.filter((member) => member.role_id !== 'leader');
+
+  const closeAdminPanel = () => {
+    setActiveAdminPanel(null);
+  };
+
+  const openAdminPanel = (panel) => {
+    setAdminError(null);
+    setActiveAdminPanel(panel);
+  };
 
   const refreshOrganization = async () => {
     await Promise.all([loadOrganization(), loadOrganizationEvents()]);
   };
 
   const handleCreateNewEvent = async () => {
-    const eventName = prompt('Enter the name of the new event');
     try {
-      if (eventName && userId && normalizedOrganizationId != null) {
+      if (createEventForm.name.trim() && userId && normalizedOrganizationId != null) {
         const op = await submitV2Operation('/events/lifecycle', {
           action: 'CREATE_EVENT',
           user_id: Number(userId),
           organization_id: normalizedOrganizationId,
-          caption: eventName,
+          caption: createEventForm.name.trim(),
         });
         await pollOperation(op.operation_id, {
           headers: { 'X-Force-Leader': 'true' },
         });
+        setCreateEventForm({ name: '' });
+        closeAdminPanel();
         loadOrganizationEvents();
       } else {
-        alert('Open a valid organization and sign in to create a new event');
+        setAdminError('Open a valid organization and sign in to create a new event');
       }
     } catch (e) {
       console.error(e);
-      alert('Error creating new event');
+      setAdminError('Error creating new event');
     }
   };
 
   const handleEditOrganization = async () => {
-    const nextName = window.prompt('Organization name', orgData?.name || '');
-    if (!nextName || !canManageOrganization) return;
-    const nextDescription = window.prompt('Organization description', orgData?.description || '') || '';
+    if (!editOrganizationForm.name.trim() || !canManageOrganization) return;
     setAdminError(null);
     try {
       await putJson(`/organizations/${normalizedOrganizationId}`, {
         user_id: Number(userId),
-        name: nextName,
-        description: nextDescription,
+        name: editOrganizationForm.name.trim(),
+        description: editOrganizationForm.description.trim(),
       });
+      closeAdminPanel();
       await loadOrganization();
     } catch (error) {
       console.error(error);
@@ -183,17 +201,17 @@ function Organization() {
   };
 
   const handleCreateRole = async () => {
-    const roleName = window.prompt('Role name');
-    if (!roleName || !canManageOrganization) return;
-    const desc = window.prompt('Role description') || '';
+    if (!createRoleForm.name.trim() || !canManageOrganization) return;
     setAdminError(null);
     try {
       await postJson('/organization-roles', {
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
-        name: roleName,
-        desc,
+        name: createRoleForm.name.trim(),
+        desc: createRoleForm.description.trim(),
       });
+      setCreateRoleForm({ name: '', description: '' });
+      closeAdminPanel();
       await loadOrganization();
     } catch (error) {
       console.error(error);
@@ -202,17 +220,17 @@ function Organization() {
   };
 
   const handleCreateToken = async () => {
-    const tokenName = window.prompt('Token name');
-    if (!tokenName || !canManageOrganization) return;
-    const description = window.prompt('Token description') || '';
+    if (!createTokenForm.name.trim() || !canManageOrganization) return;
     setAdminError(null);
     try {
       await postJson('/organization-tokens', {
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
-        token_name: tokenName,
-        description,
+        token_name: createTokenForm.name.trim(),
+        description: createTokenForm.description.trim(),
       });
+      setCreateTokenForm({ name: '', description: '' });
+      closeAdminPanel();
       await loadOrganization();
     } catch (error) {
       console.error(error);
@@ -226,7 +244,7 @@ function Organization() {
       targetUserId: String(availableMembers[0]?.user_id || ''),
       roleId: availableRoles[0]?.role_id || '',
     });
-    setShowAssignRoleDialog(true);
+    openAdminPanel('assign-role');
   };
 
   const submitAssignRole = async () => {
@@ -239,7 +257,7 @@ function Organization() {
         target_user_id: Number(assignRoleForm.targetUserId),
         role_id: assignRoleForm.roleId,
       });
-      setShowAssignRoleDialog(false);
+      closeAdminPanel();
       await loadOrganization();
     } catch (error) {
       console.error(error);
@@ -254,7 +272,7 @@ function Organization() {
       tokenId: String(availableTokens[0]?.token_id || ''),
       qty: '1',
     });
-    setShowGrantTokensDialog(true);
+    openAdminPanel('grant-tokens');
   };
 
   const submitGrantTokens = async () => {
@@ -275,10 +293,67 @@ function Organization() {
         target_user_id: Number(grantTokensForm.targetUserId),
         qty: Number(grantTokensForm.qty),
       });
-      setShowGrantTokensDialog(false);
+      closeAdminPanel();
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to grant tokens');
+    }
+  };
+
+  const handleRemoveMember = async () => {
+    if (!canManageOrganization) return;
+    setRemoveMemberForm({
+      targetUserId: String(removableMembers[0]?.user_id || ''),
+    });
+    openAdminPanel('remove-member');
+  };
+
+  const submitRemoveMember = async () => {
+    if (!removeMemberForm.targetUserId || !canManageOrganization) return;
+    setAdminError(null);
+    try {
+      await postJson('/organization-members/remove', {
+        user_id: Number(userId),
+        organization_id: normalizedOrganizationId,
+        target_user_id: Number(removeMemberForm.targetUserId),
+      });
+      closeAdminPanel();
+      await refreshOrganization();
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to remove member');
+    }
+  };
+
+  const submitLeaveOrganization = async () => {
+    if (!canLeaveOrganization) return;
+    setAdminError(null);
+    try {
+      await postJson('/organization-members/leave', {
+        user_id: Number(userId),
+        organization_id: normalizedOrganizationId,
+      });
+      closeAdminPanel();
+      navigate(`/dashboard${userId ? `?userId=${userId}` : ''}`);
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to leave organization');
+    }
+  };
+
+  const submitDeleteOrganization = async () => {
+    if (!canManageOrganization) return;
+    setAdminError(null);
+    try {
+      await postJson('/organizations/delete', {
+        user_id: Number(userId),
+        organization_id: normalizedOrganizationId,
+      });
+      closeAdminPanel();
+      navigate(`/dashboard${userId ? `?userId=${userId}` : ''}`);
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to delete organization');
     }
   };
 
@@ -286,6 +361,18 @@ function Organization() {
     <section className="organization-page" aria-label="Organizer dashboard">
       <div className="organization-shell">
         <header className="organization-hero">
+          <div className="organization-nav">
+            <Link
+              className="page-back-link"
+              to={`/dashboard${userId ? `?userId=${userId}` : ''}`}
+              aria-label="Back to dashboard"
+            >
+              <span className="page-back-link__arrow" aria-hidden="true">
+                {'<'}
+              </span>
+              <span className="page-back-link__label">Dashboard</span>
+            </Link>
+          </div>
           <p className="organization-kicker">Organizer View</p>
           <h1>
             {orgLoading
@@ -312,31 +399,409 @@ function Organization() {
               </p>
             </div>
           )}
-          <div className="organization-actions">
-            <button type="button" onClick={handleCreateNewEvent}>Create New Event</button>
-            <button type="button" className="organization-actions__secondary">
-              Invite Members
-            </button>
+          <div className="organization-action-groups">
+            <section className="organization-action-group">
+              <div className="organization-action-group__header">
+                <span>Organization actions</span>
+                <p>Everyday actions for working inside this organization.</p>
+              </div>
+              <div className="organization-actions ui-action-bar">
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--primary"
+                  onClick={() => {
+                    setCreateEventForm({ name: '' });
+                    openAdminPanel('create-event');
+                  }}
+                >
+                  Create new event
+                </button>
+                {canLeaveOrganization && (
+                  <button
+                    type="button"
+                    className="ui-action-button ui-action-button--ghost"
+                    onClick={() => openAdminPanel('leave-organization')}
+                  >
+                    Leave organization
+                  </button>
+                )}
+              </div>
+            </section>
             {canManageOrganization && (
-              <>
-                <button type="button" className="organization-actions__secondary" onClick={handleEditOrganization}>
-                  Edit Org
-                </button>
-                <button type="button" className="organization-actions__secondary" onClick={handleCreateRole}>
-                  Create Role
-                </button>
-                <button type="button" className="organization-actions__secondary" onClick={handleCreateToken}>
-                  Create Token
-                </button>
-                <button type="button" className="organization-actions__secondary" onClick={handleAssignRole}>
-                  Assign Role
-                </button>
-                <button type="button" className="organization-actions__secondary" onClick={handleGrantTokens}>
-                  Grant Tokens
-                </button>
-              </>
+              <section className="organization-action-group organization-action-group--owner">
+                <div className="organization-action-group__header">
+                  <span>Owner actions</span>
+                  <p>Organization setup, access control, and administrative tools.</p>
+                </div>
+                <div className="organization-actions ui-action-bar">
+                  <button
+                    type="button"
+                    className="ui-action-button ui-action-button--secondary"
+                    onClick={() => {
+                      setEditOrganizationForm({
+                        name: orgData?.name || '',
+                        description: orgData?.description || '',
+                      });
+                      openAdminPanel('edit-organization');
+                    }}
+                  >
+                    Edit org
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-action-button ui-action-button--secondary"
+                    onClick={() => {
+                      setCreateRoleForm({ name: '', description: '' });
+                      openAdminPanel('create-role');
+                    }}
+                  >
+                    Create role
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-action-button ui-action-button--secondary"
+                    onClick={() => {
+                      setCreateTokenForm({ name: '', description: '' });
+                      openAdminPanel('create-token');
+                    }}
+                  >
+                    Create token
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-action-button ui-action-button--secondary"
+                    onClick={handleAssignRole}
+                  >
+                    Assign role
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-action-button ui-action-button--secondary"
+                    onClick={handleGrantTokens}
+                  >
+                    Grant tokens
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-action-button ui-action-button--secondary"
+                    onClick={handleRemoveMember}
+                  >
+                    Remove member
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-action-button ui-action-button--ghost"
+                    onClick={() => openAdminPanel('delete-organization')}
+                  >
+                    Delete org
+                  </button>
+                </div>
+              </section>
             )}
           </div>
+          {activeAdminPanel === 'create-event' && (
+            <InlineActionPanel
+              title="Create new event"
+              description="Add a new event directly from the organization page."
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleCreateNewEvent();
+              }}
+              onCancel={closeAdminPanel}
+              submitLabel="Create event"
+              submitDisabled={!createEventForm.name.trim()}
+            >
+              <label data-span="full">
+                Event name
+                <input
+                  type="text"
+                  value={createEventForm.name}
+                  onChange={(event) => setCreateEventForm({ name: event.target.value })}
+                  placeholder="2026 UND Spring Forecast Challenge"
+                />
+              </label>
+            </InlineActionPanel>
+          )}
+          {activeAdminPanel === 'edit-organization' && (
+            <InlineActionPanel
+              title="Edit organization"
+              description="Update the organization name and description in place."
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleEditOrganization();
+              }}
+              onCancel={closeAdminPanel}
+              submitLabel="Save changes"
+              submitDisabled={!editOrganizationForm.name.trim()}
+            >
+              <label>
+                Organization name
+                <input
+                  type="text"
+                  value={editOrganizationForm.name}
+                  onChange={(event) =>
+                    setEditOrganizationForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                />
+              </label>
+              <label data-span="full">
+                Description
+                <textarea
+                  value={editOrganizationForm.description}
+                  onChange={(event) =>
+                    setEditOrganizationForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </InlineActionPanel>
+          )}
+          {activeAdminPanel === 'create-role' && (
+            <InlineActionPanel
+              title="Create role"
+              description="Set up a new role without leaving the organization workspace."
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleCreateRole();
+              }}
+              onCancel={closeAdminPanel}
+              submitLabel="Create role"
+              submitDisabled={!createRoleForm.name.trim()}
+            >
+              <label>
+                Role name
+                <input
+                  type="text"
+                  value={createRoleForm.name}
+                  onChange={(event) =>
+                    setCreateRoleForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                />
+              </label>
+              <label data-span="full">
+                Role description
+                <textarea
+                  value={createRoleForm.description}
+                  onChange={(event) =>
+                    setCreateRoleForm((current) => ({ ...current, description: event.target.value }))
+                  }
+                />
+              </label>
+            </InlineActionPanel>
+          )}
+          {activeAdminPanel === 'create-token' && (
+            <InlineActionPanel
+              title="Create token"
+              description="Add a new organization token in the same management area."
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleCreateToken();
+              }}
+              onCancel={closeAdminPanel}
+              submitLabel="Create token"
+              submitDisabled={!createTokenForm.name.trim()}
+            >
+              <label>
+                Token name
+                <input
+                  type="text"
+                  value={createTokenForm.name}
+                  onChange={(event) =>
+                    setCreateTokenForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                />
+              </label>
+              <label data-span="full">
+                Token description
+                <textarea
+                  value={createTokenForm.description}
+                  onChange={(event) =>
+                    setCreateTokenForm((current) => ({ ...current, description: event.target.value }))
+                  }
+                />
+              </label>
+            </InlineActionPanel>
+          )}
+          {activeAdminPanel === 'assign-role' && (
+            <InlineActionPanel
+              title="Assign role"
+              description="Choose a member and assign one of the organization roles."
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitAssignRole();
+              }}
+              onCancel={closeAdminPanel}
+              submitLabel="Assign role"
+              submitDisabled={!assignRoleForm.targetUserId || !assignRoleForm.roleId}
+            >
+              <label>
+                Member
+                <select
+                  value={assignRoleForm.targetUserId}
+                  onChange={(event) =>
+                    setAssignRoleForm((current) => ({ ...current, targetUserId: event.target.value }))
+                  }
+                >
+                  <option value="" disabled>
+                    Select a member
+                  </option>
+                  {availableMembers.map((member) => (
+                    <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
+                      {formatMemberLabel(member)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Role
+                <select
+                  value={assignRoleForm.roleId}
+                  onChange={(event) =>
+                    setAssignRoleForm((current) => ({ ...current, roleId: event.target.value }))
+                  }
+                >
+                  <option value="" disabled>
+                    Select a role
+                  </option>
+                  {availableRoles.map((role) => (
+                    <option key={role.role_id} value={role.role_id}>
+                      {formatRoleOption(role)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </InlineActionPanel>
+          )}
+          {activeAdminPanel === 'grant-tokens' && (
+            <InlineActionPanel
+              title="Grant tokens"
+              description="Pick a member, choose a token, and grant the exact amount."
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitGrantTokens();
+              }}
+              onCancel={closeAdminPanel}
+              submitLabel="Grant tokens"
+              submitDisabled={
+                !grantTokensForm.targetUserId || !grantTokensForm.tokenId || Number(grantTokensForm.qty) <= 0
+              }
+            >
+              <label>
+                Member
+                <select
+                  value={grantTokensForm.targetUserId}
+                  onChange={(event) =>
+                    setGrantTokensForm((current) => ({ ...current, targetUserId: event.target.value }))
+                  }
+                >
+                  <option value="" disabled>
+                    Select a member
+                  </option>
+                  {availableMembers.map((member) => (
+                    <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
+                      {formatMemberLabel(member)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Token
+                <select
+                  value={grantTokensForm.tokenId}
+                  onChange={(event) =>
+                    setGrantTokensForm((current) => ({ ...current, tokenId: event.target.value }))
+                  }
+                >
+                  <option value="" disabled>
+                    Select a token
+                  </option>
+                  {availableTokens.map((token) => (
+                    <option key={token.token_id} value={String(token.token_id)}>
+                      {token.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Quantity
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={grantTokensForm.qty}
+                  onChange={(event) =>
+                    setGrantTokensForm((current) => ({ ...current, qty: event.target.value }))
+                  }
+                />
+              </label>
+            </InlineActionPanel>
+          )}
+          {activeAdminPanel === 'remove-member' && (
+            <InlineActionPanel
+              title="Remove member"
+              description="Select a member to remove from the organization. Leaders cannot be removed here."
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitRemoveMember();
+              }}
+              onCancel={closeAdminPanel}
+              submitLabel="Remove member"
+              submitDisabled={!removeMemberForm.targetUserId}
+            >
+              <label data-span="full">
+                Member
+                <select
+                  value={removeMemberForm.targetUserId}
+                  onChange={(event) => setRemoveMemberForm({ targetUserId: event.target.value })}
+                >
+                  <option value="" disabled>
+                    Select a member
+                  </option>
+                  {removableMembers.map((member) => (
+                    <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
+                      {formatMemberLabel(member)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </InlineActionPanel>
+          )}
+          {activeAdminPanel === 'leave-organization' && (
+            <InlineActionPanel
+              title="Leave organization"
+              description="You will lose member access to this organization after leaving."
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitLeaveOrganization();
+              }}
+              onCancel={closeAdminPanel}
+              submitLabel="Leave organization"
+            >
+              <label data-span="full">
+                Confirmation
+                <input type="text" value="Leave this organization and return to your dashboard." readOnly />
+              </label>
+            </InlineActionPanel>
+          )}
+          {activeAdminPanel === 'delete-organization' && (
+            <InlineActionPanel
+              title="Delete organization"
+              description="This permanently removes the organization and its related records."
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitDeleteOrganization();
+              }}
+              onCancel={closeAdminPanel}
+              submitLabel="Delete organization"
+            >
+              <label data-span="full">
+                Confirmation
+                <input type="text" value="Delete this organization and all of its events, markets, roles, and tokens." readOnly />
+              </label>
+            </InlineActionPanel>
+          )}
           {adminError && <p className="organization-inline-note">{adminError}</p>}
         </header>
 
@@ -385,7 +850,8 @@ function Organization() {
                 <ul>
                   {orgData.roles.map((role) => (
                     <li key={role.role_id}>
-                      <strong>{role.role_id}</strong>: {role.description}
+                      <strong>{role.role_id}</strong>
+                      {role.description ? `: ${role.description}` : ''}
                     </li>
                   ))}
                 </ul>
@@ -417,116 +883,7 @@ function Organization() {
             )}
           </article>
         </section>
-
       </div>
-      {showAssignRoleDialog && (
-        <ActionDialog
-          title="Assign Organization Role"
-          description="Pick a member and role by name. The app will send the matching ids for you."
-          onClose={() => setShowAssignRoleDialog(false)}
-          onSubmit={submitAssignRole}
-          submitLabel="Assign Role"
-          submitDisabled={!assignRoleForm.targetUserId || !assignRoleForm.roleId}
-        >
-          <label>
-            Member
-            <select
-              value={assignRoleForm.targetUserId}
-              onChange={(event) =>
-                setAssignRoleForm((current) => ({ ...current, targetUserId: event.target.value }))
-              }
-            >
-              <option value="" disabled>
-                Select a member
-              </option>
-              {availableMembers.map((member) => (
-                <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
-                  {formatMemberLabel(member)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Role
-            <select
-              value={assignRoleForm.roleId}
-              onChange={(event) =>
-                setAssignRoleForm((current) => ({ ...current, roleId: event.target.value }))
-              }
-            >
-              <option value="" disabled>
-                Select a role
-              </option>
-              {availableRoles.map((role) => (
-                <option key={role.role_id} value={role.role_id}>
-                  {role.role_id}
-                </option>
-              ))}
-            </select>
-          </label>
-        </ActionDialog>
-      )}
-      {showGrantTokensDialog && (
-        <ActionDialog
-          title="Grant Tokens"
-          description="Choose the member and token by name, then set how many to grant."
-          onClose={() => setShowGrantTokensDialog(false)}
-          onSubmit={submitGrantTokens}
-          submitLabel="Grant Tokens"
-          submitDisabled={
-            !grantTokensForm.targetUserId || !grantTokensForm.tokenId || Number(grantTokensForm.qty) <= 0
-          }
-        >
-          <label>
-            Member
-            <select
-              value={grantTokensForm.targetUserId}
-              onChange={(event) =>
-                setGrantTokensForm((current) => ({ ...current, targetUserId: event.target.value }))
-              }
-            >
-              <option value="" disabled>
-                Select a member
-              </option>
-              {availableMembers.map((member) => (
-                <option key={`${member.user_id}-${member.role_id || 'member'}`} value={String(member.user_id)}>
-                  {formatMemberLabel(member)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Token
-            <select
-              value={grantTokensForm.tokenId}
-              onChange={(event) =>
-                setGrantTokensForm((current) => ({ ...current, tokenId: event.target.value }))
-              }
-            >
-              <option value="" disabled>
-                Select a token
-              </option>
-              {availableTokens.map((token) => (
-                <option key={token.token_id} value={String(token.token_id)}>
-                  {token.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Quantity
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={grantTokensForm.qty}
-              onChange={(event) =>
-                setGrantTokensForm((current) => ({ ...current, qty: event.target.value }))
-              }
-            />
-          </label>
-        </ActionDialog>
-      )}
     </section>
   );
 }
