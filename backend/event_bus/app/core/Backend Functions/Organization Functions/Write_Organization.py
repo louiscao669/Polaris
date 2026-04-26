@@ -581,3 +581,350 @@ def _grant_o_token_to_user(cursor, db, user_id, organization_id, token_id, targe
         print(f"Transaction failed, rolled back: {e}")
 
         return _fail("validation", f"Unable to distribute organization tokens: {e}")
+
+
+def join_o(data: dict[str, Any]):
+    user_id = data.get("user_id")
+    organization_id = data.get("organization_id")
+    role_id = data.get("role_id")
+
+    if user_id is None:
+        result = _fail("validation", "join_o payload is missing required field 'user_id'.")
+        _log_result("join_o", result)
+        return result
+
+    if organization_id is None:
+        result = _fail("validation", "join_o payload is missing required field 'organization_id'.")
+        _log_result("join_o", result)
+        return result
+
+    if role_id is None:
+        result = _fail("validation", "join_o payload is missing required field 'role_id'.")
+        _log_result("join_o", result)
+        return result
+
+    with get_connection() as db:
+        cursor = db.cursor()
+        result = _join_o(cursor, db, user_id, organization_id, role_id)
+    _log_result("join_o", result)
+    return result
+
+
+def _join_o(cursor, db, user_id, organization_id, role_id):
+    try:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM users
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        if cursor.fetchone() is None:
+            return _fail("validation", "That user does not exist.")
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization
+            WHERE org_id = %s
+            """,
+            (organization_id,),
+        )
+        if cursor.fetchone() is None:
+            return _fail("validation", "That organization does not exist.")
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization_role
+            WHERE org_id = %s AND role = %s
+            """,
+            (organization_id, role_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("validation", "That role does not exist in the organization.")
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization_leader
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, user_id),
+        )
+        if cursor.fetchone() is not None:
+            return _fail("precondition", "The organization leader is already part of the organization.")
+
+        cursor.execute(
+            """
+            SELECT role_id
+            FROM user_org_role
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, user_id),
+        )
+        existing_role = cursor.fetchone()
+        if existing_role is not None:
+            if existing_role[0] == role_id:
+                return True
+            return _fail("precondition", "You are already in this organization under a different role.")
+
+        cursor.execute(
+            """
+            INSERT INTO user_org_role (org_id, role_id, user_id)
+            VALUES (%s, %s, %s)
+            """,
+            (organization_id, role_id, user_id),
+        )
+        db.commit()
+        invalidate_user_metadata_cache(int(user_id))
+        return True
+
+    except pymysql.err.IntegrityError:
+        db.rollback()
+        return _fail("validation", "Unable to join the organization.")
+
+    except Exception as e:
+        db.rollback()
+        print(f"Transaction failed, rolled back: {e}")
+        return _fail("validation", f"Unable to join the organization: {e}")
+
+
+def leave_o(data: dict[str, Any]):
+    user_id = data.get("user_id")
+    organization_id = data.get("organization_id")
+
+    if user_id is None:
+        result = _fail("validation", "leave_o payload is missing required field 'user_id'.")
+        _log_result("leave_o", result)
+        return result
+
+    if organization_id is None:
+        result = _fail("validation", "leave_o payload is missing required field 'organization_id'.")
+        _log_result("leave_o", result)
+        return result
+
+    with get_connection() as db:
+        cursor = db.cursor()
+        result = _leave_o(cursor, db, user_id, organization_id)
+    _log_result("leave_o", result)
+    return result
+
+
+def _leave_o(cursor, db, user_id, organization_id):
+    try:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization_leader
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, user_id),
+        )
+        if cursor.fetchone() is not None:
+            return _fail("precondition", "The organization leader cannot leave without deleting or transferring the organization.")
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM user_org_role
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, user_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("precondition", "You are not a member of that organization.")
+
+        cursor.execute(
+            """
+            DELETE FROM event_market_creators
+            WHERE user_id = %s
+              AND event_id IN (
+                SELECT event_id
+                FROM events
+                WHERE org_id = %s
+              )
+            """,
+            (user_id, organization_id),
+        )
+        cursor.execute(
+            """
+            DELETE FROM user_org_role
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, user_id),
+        )
+        db.commit()
+        invalidate_user_metadata_cache(int(user_id))
+        return True
+
+    except Exception as e:
+        db.rollback()
+        print(f"Transaction failed, rolled back: {e}")
+        return _fail("validation", f"Unable to leave the organization: {e}")
+
+
+def remove_user_from_o(data: dict[str, Any]):
+    user_id = data.get("user_id")
+    organization_id = data.get("organization_id")
+    target_user_id = data.get("target_user_id")
+
+    if user_id is None:
+        result = _fail("validation", "remove_user_from_o payload is missing required field 'user_id'.")
+        _log_result("remove_user_from_o", result)
+        return result
+
+    if organization_id is None:
+        result = _fail("validation", "remove_user_from_o payload is missing required field 'organization_id'.")
+        _log_result("remove_user_from_o", result)
+        return result
+
+    if target_user_id is None:
+        result = _fail("validation", "remove_user_from_o payload is missing required field 'target_user_id'.")
+        _log_result("remove_user_from_o", result)
+        return result
+
+    with get_connection() as db:
+        cursor = db.cursor()
+        result = _remove_user_from_o(cursor, db, user_id, organization_id, target_user_id)
+    _log_result("remove_user_from_o", result)
+    return result
+
+
+def _remove_user_from_o(cursor, db, user_id, organization_id, target_user_id):
+    try:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization_leader
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, user_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("permission", "Only the organization leader can remove members.")
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization_leader
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, target_user_id),
+        )
+        if cursor.fetchone() is not None:
+            return _fail("precondition", "The organization leader cannot be removed from the organization.")
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM user_org_role
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, target_user_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("precondition", "That user is not a member of the organization.")
+
+        cursor.execute(
+            """
+            DELETE FROM event_market_creators
+            WHERE user_id = %s
+              AND event_id IN (
+                SELECT event_id
+                FROM events
+                WHERE org_id = %s
+              )
+            """,
+            (target_user_id, organization_id),
+        )
+        cursor.execute(
+            """
+            DELETE FROM user_org_role
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, target_user_id),
+        )
+        db.commit()
+        invalidate_user_metadata_cache(int(target_user_id))
+        return True
+
+    except Exception as e:
+        db.rollback()
+        print(f"Transaction failed, rolled back: {e}")
+        return _fail("validation", f"Unable to remove the member from the organization: {e}")
+
+
+def delete_o(data: dict[str, Any]):
+    user_id = data.get("user_id")
+    organization_id = data.get("organization_id")
+
+    if user_id is None:
+        result = _fail("validation", "delete_o payload is missing required field 'user_id'.")
+        _log_result("delete_o", result)
+        return result
+
+    if organization_id is None:
+        result = _fail("validation", "delete_o payload is missing required field 'organization_id'.")
+        _log_result("delete_o", result)
+        return result
+
+    with get_connection() as db:
+        cursor = db.cursor()
+        result = _delete_o(cursor, db, user_id, organization_id)
+    _log_result("delete_o", result)
+    return result
+
+
+def _delete_o(cursor, db, user_id, organization_id):
+    try:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization_leader
+            WHERE org_id = %s AND user_id = %s
+            """,
+            (organization_id, user_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("permission", "Only the organization leader can delete the organization.")
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM organization
+            WHERE org_id = %s
+            """,
+            (organization_id,),
+        )
+        if cursor.fetchone() is None:
+            return _fail("validation", "That organization does not exist.")
+
+        cursor.execute(
+            """
+            SELECT user_id
+            FROM user_org_role
+            WHERE org_id = %s
+            """,
+            (organization_id,),
+        )
+        impacted_user_ids = {int(row[0]) for row in cursor.fetchall()}
+        impacted_user_ids.add(int(user_id))
+
+        cursor.execute(
+            """
+            DELETE FROM organization
+            WHERE org_id = %s
+            """,
+            (organization_id,),
+        )
+        db.commit()
+        for impacted_user_id in impacted_user_ids:
+            invalidate_user_metadata_cache(impacted_user_id)
+        return True
+
+    except Exception as e:
+        db.rollback()
+        print(f"Transaction failed, rolled back: {e}")
+        return _fail("validation", f"Unable to delete the organization: {e}")

@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
+from pymysql.cursors import DictCursor
 
 from .read_cache import cache_mode
+from .database import get_connection_reader
 
 _BF_ROOT = Path(__file__).resolve().parent / "core" / "Backend Functions"
 for _dir in (
@@ -113,6 +115,163 @@ def _apply_with_cache_mode(
         return _apply(fn, payload)
 
 
+def _read_user_portfolio(user_id: int) -> dict[str, Any]:
+    with get_connection_reader() as conn:
+        cur = conn.cursor(DictCursor)
+
+        cur.execute(
+            """
+            SELECT
+                uts.token_id,
+                uts.qty,
+                ot.name AS token_name,
+                ot.description AS token_description,
+                ot.org_id AS organization_id,
+                o.name AS organization_name
+            FROM user_token_stock uts
+            INNER JOIN organization_token ot ON ot.token_id = uts.token_id
+            INNER JOIN organization o ON o.org_id = ot.org_id
+            WHERE uts.user_id = %s AND uts.qty > 0
+            ORDER BY o.name ASC, ot.name ASC, uts.token_id ASC
+            """,
+            (user_id,),
+        )
+        token_balances = [
+            {
+                "token_id": int(row["token_id"]),
+                "qty": int(row["qty"]),
+                "token_name": row["token_name"],
+                "token_description": row["token_description"] or "",
+                "organization_id": int(row["organization_id"]),
+                "organization_name": row["organization_name"],
+            }
+            for row in cur.fetchall()
+        ]
+
+        cur.execute(
+            """
+            SELECT
+                umt.market_id,
+                umt.side,
+                umt.qty,
+                m.question,
+                m.is_open,
+                e.event_id,
+                e.caption AS event_caption,
+                e.org_id AS organization_id,
+                o.name AS organization_name
+            FROM user_market_ticket umt
+            INNER JOIN market m ON m.id = umt.market_id
+            INNER JOIN events e ON e.event_id = m.event_id
+            INNER JOIN organization o ON o.org_id = e.org_id
+            WHERE umt.user_id = %s AND umt.qty > 0
+            ORDER BY o.name ASC, e.caption ASC, m.question ASC, umt.side DESC
+            """,
+            (user_id,),
+        )
+        open_tickets = [
+            {
+                "market_id": int(row["market_id"]),
+                "side": bool(row["side"]),
+                "qty": int(row["qty"]),
+                "question": row["question"],
+                "is_open": bool(row["is_open"]),
+                "event_id": int(row["event_id"]),
+                "event_caption": row["event_caption"],
+                "organization_id": int(row["organization_id"]),
+                "organization_name": row["organization_name"],
+            }
+            for row in cur.fetchall()
+        ]
+
+        return {
+            "user_id": int(user_id),
+            "token_balances": token_balances,
+            "open_tickets": open_tickets,
+        }
+
+
+def _read_policy_metadata() -> dict[str, Any]:
+    with get_connection_reader() as conn:
+        cur = conn.cursor(DictCursor)
+
+        cur.execute(
+            """
+            SELECT constraint_id, name, description
+            FROM constraint_type
+            ORDER BY name ASC, constraint_id ASC
+            """
+        )
+        constraints = [
+            {
+                "constraint_id": int(row["constraint_id"]),
+                "name": row["name"],
+                "description": row["description"] or "",
+            }
+            for row in cur.fetchall()
+        ]
+
+        cur.execute(
+            """
+            SELECT as_code, description
+            FROM market_as
+            ORDER BY as_code ASC
+            """
+        )
+        market_access = [
+            {
+                "as_code": row["as_code"],
+                "description": row["description"] or "",
+            }
+            for row in cur.fetchall()
+        ]
+
+        return {
+            "constraints": constraints,
+            "market_access": market_access,
+        }
+
+
+def _read_org_join_options(organization_id: int) -> dict[str, Any]:
+    with get_connection_reader() as conn:
+        cur = conn.cursor(DictCursor)
+        cur.execute(
+            """
+            SELECT org_id, name, description
+            FROM organization
+            WHERE org_id = %s
+            """,
+            (organization_id,),
+        )
+        organization = cur.fetchone()
+        if organization is None:
+            raise HTTPException(status_code=404, detail="That organization does not exist.")
+
+        cur.execute(
+            """
+            SELECT role, description
+            FROM organization_role
+            WHERE org_id = %s
+            ORDER BY role ASC
+            """,
+            (organization_id,),
+        )
+        roles = [
+            {
+                "role_id": row["role"],
+                "description": row["description"] or "",
+            }
+            for row in cur.fetchall()
+        ]
+
+        return {
+            "organization_id": int(organization["org_id"]),
+            "name": organization["name"],
+            "description": organization["description"] or "",
+            "roles": roles,
+        }
+
+
 @router.post("/organizations")
 def http_create_organization(payload: dict[str, Any] = Body(...)):
     return _apply(_write_org.create_o, payload)
@@ -133,9 +292,29 @@ def http_create_user_in_role(payload: dict[str, Any] = Body(...)):
     return _apply(_write_org.create_user_in_role, payload)
 
 
+@router.post("/organization-members/join")
+def http_join_organization(payload: dict[str, Any] = Body(...)):
+    return _apply(_write_org.join_o, payload)
+
+
+@router.post("/organization-members/leave")
+def http_leave_organization(payload: dict[str, Any] = Body(...)):
+    return _apply(_write_org.leave_o, payload)
+
+
+@router.post("/organization-members/remove")
+def http_remove_organization_member(payload: dict[str, Any] = Body(...)):
+    return _apply(_write_org.remove_user_from_o, payload)
+
+
 @router.post("/organization-token-grants")
 def http_grant_organization_token(payload: dict[str, Any] = Body(...)):
     return _apply(_write_org.grant_o_token_to_user, payload)
+
+
+@router.post("/organizations/delete")
+def http_delete_organization(payload: dict[str, Any] = Body(...)):
+    return _apply(_write_org.delete_o, payload)
 
 
 @router.put("/organizations/{organization_id}")
@@ -175,6 +354,20 @@ def http_read_user_organizations(user_id: int):
     return _apply(_read_org.read_user_organizations, {"user_id": user_id})
 
 
+@router.get("/dashboard/users/{user_id}/portfolio")
+def http_read_user_portfolio(
+    user_id: int,
+    cache_mode_name: str = Query("default", alias="cache_mode"),
+):
+    with cache_mode(cache_mode_name):
+        return _read_user_portfolio(user_id)
+
+
+@router.get("/metadata/policy-options")
+def http_read_policy_metadata():
+    return _read_policy_metadata()
+
+
 @router.get("/organizations/{organization_id}")
 def http_read_organization(
     organization_id: int,
@@ -186,6 +379,11 @@ def http_read_organization(
         {"organization_id": organization_id, "user_id": user_id},
         request_cache_mode=cache_mode_name,
     )
+
+
+@router.get("/organizations/{organization_id}/join-options")
+def http_read_org_join_options(organization_id: int):
+    return _read_org_join_options(organization_id)
 
 
 @router.get("/organizations/{organization_id}/events")
