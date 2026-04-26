@@ -506,19 +506,6 @@ def http_update_market(
     return _apply(_update_market.update_m, {**payload, "market_id": market_id})
 
 
-@router.get("/markets/{market_id}")
-def http_read_market(
-    market_id: int,
-    user_id: int = Query(...),
-    cache_mode_name: str = Query("default", alias="cache_mode"),
-):
-    return _apply_with_cache_mode(
-        _read_market.read_m,
-        {"market_id": market_id, "user_id": user_id},
-        request_cache_mode=cache_mode_name,
-    )
-
-
 @router.get("/markets/stats/liquidity")
 def http_stats_liquidity(
     user_id: int = Query(...),
@@ -595,6 +582,19 @@ def http_market_points(
     return _apply_with_cache_mode(
         _read_market.points_m,
         {"user_id": user_id, "market_id": market_id, "span": span},
+        request_cache_mode=cache_mode_name,
+    )
+
+
+@router.get("/markets/{market_id}")
+def http_read_market(
+    market_id: int,
+    user_id: int = Query(...),
+    cache_mode_name: str = Query("default", alias="cache_mode"),
+):
+    return _apply_with_cache_mode(
+        _read_market.read_m,
+        {"market_id": market_id, "user_id": user_id},
         request_cache_mode=cache_mode_name,
     )
 
