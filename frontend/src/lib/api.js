@@ -1,3 +1,5 @@
+import { getStoredAccessToken, getStoredUserId } from './auth';
+
 const DEFAULT_API_ROOT = 'https://d2vrkasldxh3jt.cloudfront.net';
 
 export const API_ROOT = (
@@ -32,6 +34,22 @@ export function formatApiError(payload, fallback = 'Request failed.') {
   return fallback;
 }
 
+function getAuthHeaders() {
+  const headers = {};
+  const sessionToken = getStoredAccessToken();
+  const userId = getStoredUserId();
+
+  if (typeof sessionToken === 'string' && sessionToken.split('.').length === 3) {
+    headers.Authorization = `Bearer ${sessionToken}`;
+  }
+
+  if (userId != null) {
+    headers['X-User-Id'] = String(userId);
+  }
+
+  return headers;
+}
+
 export async function readJson(path, options = {}) {
   const response = await fetch(`${READ_API_BASE}${path}`, options);
   const payload = await response.json().catch(() => ({}));
@@ -48,6 +66,7 @@ export async function postJson(path, body, options = {}) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
       ...(options.headers || {}),
     },
     ...options,
@@ -68,6 +87,7 @@ export async function putJson(path, body, options = {}) {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
       ...(options.headers || {}),
     },
     ...options,
@@ -88,6 +108,7 @@ export async function submitV2Operation(path, body, options = {}) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
       ...(options.headers || {}),
     },
     ...options,
@@ -113,7 +134,10 @@ export async function pollOperation(operationId, options = {}) {
 
   while (Date.now() - startedAt < timeoutMs) {
     const payload = await readJson(`/v2/operations/${operationId}`, {
-      headers,
+      headers: {
+        ...getAuthHeaders(),
+        ...(headers || {}),
+      },
     });
 
     if (payload.status === 'succeeded') {

@@ -161,7 +161,7 @@ function Organization() {
 
   const handleCreateNewEvent = async () => {
     try {
-      if (createEventForm.name.trim() && userId && normalizedOrganizationId != null) {
+      if (createEventForm.name.trim() && userId && normalizedOrganizationId != null && canManageOrganization) {
         const op = await submitV2Operation('/events/lifecycle', {
           action: 'CREATE_EVENT',
           user_id: Number(userId),
@@ -175,11 +175,11 @@ function Organization() {
         closeAdminPanel();
         loadOrganizationEvents();
       } else {
-        setAdminError('Open a valid organization and sign in to create a new event');
+        setAdminError('Only the organization owner can create a new event.');
       }
     } catch (e) {
       console.error(e);
-      setAdminError('Error creating new event');
+      setAdminError(e.message || 'Error creating new event');
     }
   };
 
@@ -406,16 +406,6 @@ function Organization() {
                 <p>Everyday actions for working inside this organization.</p>
               </div>
               <div className="organization-actions ui-action-bar">
-                <button
-                  type="button"
-                  className="ui-action-button ui-action-button--primary"
-                  onClick={() => {
-                    setCreateEventForm({ name: '' });
-                    openAdminPanel('create-event');
-                  }}
-                >
-                  Create new event
-                </button>
                 {canLeaveOrganization && (
                   <button
                     type="button"
@@ -431,9 +421,19 @@ function Organization() {
               <section className="organization-action-group organization-action-group--owner">
                 <div className="organization-action-group__header">
                   <span>Owner actions</span>
-                  <p>Organization setup, access control, and administrative tools.</p>
+                  <p>Organization setup, events, access control, and administrative tools.</p>
                 </div>
                 <div className="organization-actions ui-action-bar">
+                  <button
+                    type="button"
+                    className="ui-action-button ui-action-button--primary"
+                    onClick={() => {
+                      setCreateEventForm({ name: '' });
+                      openAdminPanel('create-event');
+                    }}
+                  >
+                    Create new event
+                  </button>
                   <button
                     type="button"
                     className="ui-action-button ui-action-button--secondary"

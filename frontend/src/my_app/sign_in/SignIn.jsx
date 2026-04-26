@@ -102,6 +102,7 @@ export default function SignIn(props) {
           username: result.username || payload.username,
           firstName: result.first || null,
           lastName: result.last || null,
+          accessToken: result.access_token || result.session_token || null,
           sessionToken: result.session_token || null,
           expiresAt: result.expires_at || null,
         });

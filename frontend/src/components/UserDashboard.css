@@ -152,6 +152,48 @@
   display: block;
 }
 
+.user-dashboard-ticket {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.user-dashboard-ticket__group {
+  color: #c5d7f6;
+  font-size: 0.92rem;
+}
+
+.user-dashboard-ticket__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.user-dashboard-ticket__pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: #dbe8ff;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.user-dashboard-ticket__pill--yes {
+  background: rgba(40, 136, 73, 0.22);
+  color: #a8f0c0;
+}
+
+.user-dashboard-ticket__pill--no {
+  background: rgba(150, 56, 56, 0.28);
+  color: #ffd6d6;
+}
+
+.user-dashboard-ticket__pill--status {
+  background: rgba(59, 130, 246, 0.18);
+  color: #beddff;
+}
+
 .user-dashboard-badge {
   font-size: 0.75rem;
   font-weight: 600;

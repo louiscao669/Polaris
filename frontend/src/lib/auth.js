@@ -28,6 +28,11 @@ export function getStoredSessionToken() {
   return auth?.sessionToken || null;
 }
 
+export function getStoredAccessToken() {
+  const auth = loadAuth();
+  return auth?.accessToken || auth?.sessionToken || null;
+}
+
 export function getStoredFirstName() {
   const auth = loadAuth();
   return auth?.firstName || null;

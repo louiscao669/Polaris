@@ -465,9 +465,6 @@ export default function UserDashboard() {
 
           <article className="user-dashboard-card">
             <h2>Your token balances</h2>
-            <p className="user-dashboard-muted">
-              Polaris stores tokens in base units, so <code>100</code> means <code>1.00</code> token.
-            </p>
             {portfolioLoading && <p className="user-dashboard-muted">Loading…</p>}
             {portfolioError && <p className="user-dashboard-error">{portfolioError}</p>}
             {!portfolioLoading && !portfolioError && portfolio.token_balances.length === 0 && (
@@ -498,13 +495,24 @@ export default function UserDashboard() {
             <ul className="user-dashboard-event-list">
               {portfolio.open_tickets.map((ticket) => (
                 <li key={`${ticket.market_id}-${ticket.side ? 'yes' : 'no'}`}>
-                  <div>
+                  <div className="user-dashboard-ticket">
                     <strong>{ticket.question}</strong>
-                    <span className="user-dashboard-muted">
+                    <span className="user-dashboard-ticket__group">
                       {ticket.organization_name} · {ticket.event_caption}
                     </span>
-                    <span className="user-dashboard-muted">
-                      {ticket.side ? 'YES' : 'NO'} side · {ticket.is_open ? 'Open market' : 'Resolved market'}
+                    <span className="user-dashboard-ticket__meta">
+                      <span
+                        className={
+                          ticket.side
+                            ? 'user-dashboard-ticket__pill user-dashboard-ticket__pill--yes'
+                            : 'user-dashboard-ticket__pill user-dashboard-ticket__pill--no'
+                        }
+                      >
+                        {ticket.side ? 'YES' : 'NO'} side
+                      </span>
+                      <span className="user-dashboard-ticket__pill user-dashboard-ticket__pill--status">
+                        {ticket.is_open ? 'Open market' : 'Resolved market'}
+                      </span>
                     </span>
                   </div>
                   <span className="user-dashboard-badge">
