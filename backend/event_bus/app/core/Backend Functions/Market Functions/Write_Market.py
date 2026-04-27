@@ -398,7 +398,7 @@ def _designate_m_result(cursor, db, user_id, market_id, result):
         token_rows = cursor.fetchall()
 
         for token_row in token_rows:
-            payout_result = do_m_payout(cursor, db, user_id, market_id, token_row[0])
+            payout_result = _do_m_payout(cursor, db, user_id, market_id, token_row[0])
             if isinstance(payout_result, dict) and payout_result.get("ok") is False:
                 return payout_result
 
