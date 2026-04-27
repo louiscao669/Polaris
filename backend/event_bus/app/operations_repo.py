@@ -55,17 +55,19 @@ def update_operation_status(
     operation_id: UUID,
     status: str,
     error_message: str | None = None,
+    result: Any | None = None,
 ) -> None:
     msg = error_message[:65535] if error_message else None
+    result_json = json.dumps(result, default=str) if result is not None else None
     with get_connection_writer() as conn:
         cur = conn.cursor()
         cur.execute(
             """
             UPDATE operations
-            SET status = %s, error_message = %s
+            SET status = %s, error_message = %s, result_json = %s
             WHERE operation_id = %s
             """,
-            (status, msg, str(operation_id)),
+            (status, msg, result_json, str(operation_id)),
         )
         conn.commit()
 
@@ -83,7 +85,7 @@ def fetch_operation(
         cur = conn.cursor(DictCursor)
         cur.execute(
             """
-            SELECT operation_id, topic, status, envelope_json,
+            SELECT operation_id, topic, status, envelope_json, result_json,
                    error_message, kafka_partition, kafka_offset,
                    created_at, updated_at
             FROM operations
@@ -100,7 +102,13 @@ def fetch_operation(
                 out["envelope"] = json.loads(out["envelope_json"])
             except json.JSONDecodeError:
                 out["envelope"] = None
+        if out.get("result_json"):
+            try:
+                out["result"] = json.loads(out["result_json"])
+            except json.JSONDecodeError:
+                out["result"] = None
         out.pop("envelope_json", None)
+        out.pop("result_json", None)
         return out
 
 

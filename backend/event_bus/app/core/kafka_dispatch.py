@@ -10,6 +10,9 @@ from .kafka_handlers import (
     sync_create_o,
     sync_create_o_role,
     sync_create_o_token,
+    sync_create_user_in_role,
+    sync_delete_e,
+    sync_delete_o,
     sync_designate_e_closed,
     sync_designate_e_contraint,
     sync_designate_e_market_creator,
@@ -21,6 +24,15 @@ from .kafka_handlers import (
     sync_designate_m_token,
     sync_do_m_payout,
     sync_do_m_transaction,
+    sync_grant_o_token_to_user,
+    sync_join_o,
+    sync_leave_o,
+    sync_remove_user_from_o,
+    sync_update_e,
+    sync_update_m,
+    sync_update_o,
+    sync_update_o_role,
+    sync_update_o_token,
     sync_user_account_message,
 )
 from .kafka_producer import (
@@ -43,50 +55,74 @@ def dispatch_legacy_topic(topic: str, data: dict[str, Any]) -> None:
 
     if topic == TOPIC_ORGANIZATION:
         if action == "CREATE_ORGANIZATION":
-            sync_create_o(data)
+            return sync_create_o(data)
         elif action == "CREATE_ORGANIZATION_ROLE":
-            sync_create_o_role(data)
+            return sync_create_o_role(data)
         elif action == "CREATE_ORGANIZATION_TOKEN":
-            sync_create_o_token(data)
+            return sync_create_o_token(data)
+        elif action == "CREATE_ORGANIZATION_MEMBER":
+            return sync_create_user_in_role(data)
+        elif action == "JOIN_ORGANIZATION":
+            return sync_join_o(data)
+        elif action == "LEAVE_ORGANIZATION":
+            return sync_leave_o(data)
+        elif action == "REMOVE_ORGANIZATION_MEMBER":
+            return sync_remove_user_from_o(data)
+        elif action == "GRANT_ORGANIZATION_TOKEN":
+            return sync_grant_o_token_to_user(data)
+        elif action == "DELETE_ORGANIZATION":
+            return sync_delete_o(data)
+        elif action == "UPDATE_ORGANIZATION":
+            return sync_update_o(data)
+        elif action == "UPDATE_ORGANIZATION_ROLE":
+            return sync_update_o_role(data)
+        elif action == "UPDATE_ORGANIZATION_TOKEN":
+            return sync_update_o_token(data)
         else:
             raise ValueError(f"unknown action for organization topic: {action!r}")
 
     elif topic == TOPIC_PLATFORM_EVENT:
         if action == "CREATE_EVENT":
-            sync_create_e(data)
+            return sync_create_e(data)
         elif action == "DESIGNATE_EVENT_TOKEN":
-            sync_designate_e_token(data)
+            return sync_designate_e_token(data)
         elif action == "DESIGNATE_EVENT_MARKET_CREATOR":
-            sync_designate_e_market_creator(data)
+            return sync_designate_e_market_creator(data)
         elif action == "DESIGNATE_EVENT_CONSTRAINT":
-            sync_designate_e_contraint(data)
+            return sync_designate_e_contraint(data)
         elif action == "DESIGNATE_EVENT_OPEN_TO":
-            sync_designate_e_open_to(data)
+            return sync_designate_e_open_to(data)
         elif action == "DESIGNATE_EVENT_CLOSED":
-            sync_designate_e_closed(data)
+            return sync_designate_e_closed(data)
+        elif action == "DELETE_EVENT":
+            return sync_delete_e(data)
+        elif action == "UPDATE_EVENT":
+            return sync_update_e(data)
         else:
             raise ValueError(f"unknown action for platform.event topic: {action!r}")
 
     elif topic == TOPIC_PLATFORM_MARKET:
         if action == "CREATE_MARKET":
-            sync_create_m(data)
+            return sync_create_m(data)
         elif action == "DESIGNATE_MARKET_TOKEN":
-            sync_designate_m_token(data)
+            return sync_designate_m_token(data)
         elif action == "DESIGNATE_MARKET_RESULT":
-            sync_designate_m_result(data)
+            return sync_designate_m_result(data)
         elif action == "DESIGNATE_MARKET_CONSTRAINT":
-            sync_designate_m_contraint(data)
+            return sync_designate_m_contraint(data)
         elif action == "DESIGNATE_MARKET_OPEN_TO_AS":
-            sync_designate_m_open_to_as(data)
+            return sync_designate_m_open_to_as(data)
         elif action == "MARKET_TRANSACTION":
-            sync_do_m_transaction(data)
+            return sync_do_m_transaction(data)
         elif action == "MARKET_PAYOUT":
-            sync_do_m_payout(data)
+            return sync_do_m_payout(data)
+        elif action == "UPDATE_MARKET":
+            return sync_update_m(data)
         else:
             raise ValueError(f"unknown action for platform.market topic: {action!r}")
 
     elif topic == TOPIC_USER_IDENTITY:
-        sync_user_account_message(data)
+        return sync_user_account_message(data)
 
     else:
         raise ValueError(f"unknown legacy topic: {topic!r}")
@@ -99,36 +135,65 @@ _MARKET_LIFECYCLE_ACTIONS = frozenset(
         "DESIGNATE_MARKET_RESULT",
         "DESIGNATE_MARKET_CONSTRAINT",
         "DESIGNATE_MARKET_OPEN_TO_AS",
+        "UPDATE_MARKET",
     }
 )
 _MARKET_FINANCE_ACTIONS = frozenset({"MARKET_TRANSACTION", "MARKET_PAYOUT"})
+_ORG_ACTIONS = frozenset(
+    {
+        "CREATE_ORGANIZATION",
+        "CREATE_ORGANIZATION_ROLE",
+        "CREATE_ORGANIZATION_TOKEN",
+        "CREATE_ORGANIZATION_MEMBER",
+        "JOIN_ORGANIZATION",
+        "LEAVE_ORGANIZATION",
+        "REMOVE_ORGANIZATION_MEMBER",
+        "GRANT_ORGANIZATION_TOKEN",
+        "DELETE_ORGANIZATION",
+        "UPDATE_ORGANIZATION",
+        "UPDATE_ORGANIZATION_ROLE",
+        "UPDATE_ORGANIZATION_TOKEN",
+    }
+)
+_EVENT_ACTIONS = frozenset(
+    {
+        "CREATE_EVENT",
+        "DESIGNATE_EVENT_TOKEN",
+        "DESIGNATE_EVENT_MARKET_CREATOR",
+        "DESIGNATE_EVENT_CONSTRAINT",
+        "DESIGNATE_EVENT_OPEN_TO",
+        "DESIGNATE_EVENT_CLOSED",
+        "DELETE_EVENT",
+        "UPDATE_EVENT",
+    }
+)
 
 
-def dispatch_v2_consolidated(consolidated_topic: str, payload: dict[str, Any]) -> None:
+def dispatch_v2_consolidated(consolidated_topic: str, payload: dict[str, Any]) -> Any:
     """v2 domain topics (MSK) map onto the same handlers as legacy topics."""
     action = payload.get("action")
 
     if consolidated_topic == ORG_MANAGEMENT:
-        dispatch_legacy_topic(TOPIC_ORGANIZATION, payload)
-        return
+        if action not in _ORG_ACTIONS:
+            raise ValueError(f"unknown action for org.management topic: {action!r}")
+        return dispatch_legacy_topic(TOPIC_ORGANIZATION, payload)
 
     if consolidated_topic == EVENT_LIFECYCLE:
-        dispatch_legacy_topic(TOPIC_PLATFORM_EVENT, payload)
-        return
+        if action not in _EVENT_ACTIONS:
+            raise ValueError(f"unknown action for event.lifecycle topic: {action!r}")
+        return dispatch_legacy_topic(TOPIC_PLATFORM_EVENT, payload)
 
     if consolidated_topic == MARKET_OPERATIONS:
         if action in _MARKET_LIFECYCLE_ACTIONS:
-            dispatch_legacy_topic(TOPIC_PLATFORM_MARKET, payload)
+            return dispatch_legacy_topic(TOPIC_PLATFORM_MARKET, payload)
         elif action in _MARKET_FINANCE_ACTIONS:
-            dispatch_legacy_topic(TOPIC_PLATFORM_MARKET, payload)
+            return dispatch_legacy_topic(TOPIC_PLATFORM_MARKET, payload)
         else:
             raise ValueError(
                 f"unknown action for market.operations topic: {action!r}"
             )
-        return
 
     if consolidated_topic == USER_ACCOUNT:
-        sync_user_account_message(payload)
-        return
+        return sync_user_account_message(payload)
 
     raise ValueError(f"unknown v2 consolidated topic: {consolidated_topic!r}")

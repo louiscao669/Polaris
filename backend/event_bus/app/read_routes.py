@@ -10,8 +10,10 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query
 from pymysql.cursors import DictCursor
 
+from .command_bus import enqueue_command_response
 from .read_cache import cache_mode
 from .database import get_connection_reader, get_connection_writer
+from .topics import EVENT_LIFECYCLE, MARKET_OPERATIONS, ORG_MANAGEMENT, USER_ACCOUNT
 
 _BF_ROOT = Path(__file__).resolve().parent / "core" / "Backend Functions"
 for _dir in (
@@ -320,79 +322,135 @@ def _read_org_join_options(organization_id: int) -> dict[str, Any]:
 
 
 @router.post("/organizations")
-def http_create_organization(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_org.create_o, payload)
+async def http_create_organization(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={**payload, "action": "CREATE_ORGANIZATION"},
+    )
 
 
 @router.post("/organization-roles")
-def http_create_organization_role(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_org.create_o_role, payload)
+async def http_create_organization_role(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={**payload, "action": "CREATE_ORGANIZATION_ROLE"},
+    )
 
 
 @router.post("/organization-tokens")
-def http_create_organization_token(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_org.create_o_token, payload)
+async def http_create_organization_token(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={**payload, "action": "CREATE_ORGANIZATION_TOKEN"},
+    )
 
 
 @router.post("/organization-members")
-def http_create_user_in_role(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_org.create_user_in_role, payload)
+async def http_create_user_in_role(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={**payload, "action": "CREATE_ORGANIZATION_MEMBER"},
+    )
 
 
 @router.post("/organization-members/join")
-def http_join_organization(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_org.join_o, payload)
+async def http_join_organization(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={**payload, "action": "JOIN_ORGANIZATION"},
+    )
 
 
 @router.post("/organization-members/leave")
-def http_leave_organization(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_org.leave_o, payload)
+async def http_leave_organization(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={**payload, "action": "LEAVE_ORGANIZATION"},
+    )
 
 
 @router.post("/organization-members/remove")
-def http_remove_organization_member(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_org.remove_user_from_o, payload)
+async def http_remove_organization_member(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={**payload, "action": "REMOVE_ORGANIZATION_MEMBER"},
+    )
 
 
 @router.post("/organization-token-grants")
-def http_grant_organization_token(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_org.grant_o_token_to_user, payload)
+async def http_grant_organization_token(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={**payload, "action": "GRANT_ORGANIZATION_TOKEN"},
+    )
 
 
 @router.post("/organizations/delete")
-def http_delete_organization(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_org.delete_o, payload)
+async def http_delete_organization(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={**payload, "action": "DELETE_ORGANIZATION"},
+    )
 
 
 @router.put("/organizations/{organization_id}")
-def http_update_organization(
+async def http_update_organization(
     organization_id: int,
     payload: dict[str, Any] = Body(...),
 ):
-    return _apply(_update_org.update_o, {**payload, "organization_id": organization_id})
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={
+            **payload,
+            "organization_id": organization_id,
+            "action": "UPDATE_ORGANIZATION",
+        },
+    )
 
 
 @router.put("/organization-roles/{organization_id}/{role_id}")
-def http_update_organization_role(
+async def http_update_organization_role(
     organization_id: int,
     role_id: str,
     payload: dict[str, Any] = Body(...),
 ):
-    return _apply(
-        _update_org.update_o_role,
-        {**payload, "organization_id": organization_id, "role_id": role_id},
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={
+            **payload,
+            "organization_id": organization_id,
+            "role_id": role_id,
+            "action": "UPDATE_ORGANIZATION_ROLE",
+        },
     )
 
 
 @router.put("/organization-tokens/{organization_id}/{token_id}")
-def http_update_organization_token(
+async def http_update_organization_token(
     organization_id: int,
     token_id: int,
     payload: dict[str, Any] = Body(...),
 ):
-    return _apply(
-        _update_org.update_o_token,
-        {**payload, "organization_id": organization_id, "token_id": token_id},
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
+        domain="org.management",
+        payload={
+            **payload,
+            "organization_id": organization_id,
+            "token_id": token_id,
+            "action": "UPDATE_ORGANIZATION_TOKEN",
+        },
     )
 
 
@@ -447,46 +505,78 @@ def http_read_org_events(
 
 
 @router.post("/events")
-def http_create_event(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_event.create_e, payload)
+async def http_create_event(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
+        payload={**payload, "action": "CREATE_EVENT"},
+    )
 
 
 @router.post("/events/designate-token")
-def http_designate_event_token(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_event.designate_e_token, payload)
+async def http_designate_event_token(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
+        payload={**payload, "action": "DESIGNATE_EVENT_TOKEN"},
+    )
 
 
 @router.post("/events/designate-market-creator")
-def http_designate_event_market_creator(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_event.designate_e_market_creator, payload)
+async def http_designate_event_market_creator(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
+        payload={**payload, "action": "DESIGNATE_EVENT_MARKET_CREATOR"},
+    )
 
 
 @router.post("/events/designate-constraint")
-def http_designate_event_constraint(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_event.designate_e_contraint, payload)
+async def http_designate_event_constraint(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
+        payload={**payload, "action": "DESIGNATE_EVENT_CONSTRAINT"},
+    )
 
 
 @router.post("/events/designate-open-to")
-def http_designate_event_open_to(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_event.designate_e_open_to, payload)
+async def http_designate_event_open_to(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
+        payload={**payload, "action": "DESIGNATE_EVENT_OPEN_TO"},
+    )
 
 
 @router.post("/events/close")
-def http_designate_event_closed(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_event.designate_e_closed, payload)
+async def http_designate_event_closed(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
+        payload={**payload, "action": "DESIGNATE_EVENT_CLOSED"},
+    )
 
 
 @router.post("/events/delete")
-def http_delete_event(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_event.delete_e, payload)
+async def http_delete_event(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
+        payload={**payload, "action": "DELETE_EVENT"},
+    )
 
 
 @router.put("/events/{event_id}")
-def http_update_event(
+async def http_update_event(
     event_id: int,
     payload: dict[str, Any] = Body(...),
 ):
-    return _apply(_update_event.update_e, {**payload, "event_id": event_id})
+    return await enqueue_command_response(
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
+        payload={**payload, "event_id": event_id, "action": "UPDATE_EVENT"},
+    )
 
 
 @router.get("/events/{event_id}")
@@ -516,46 +606,78 @@ def http_read_event_markets(
 
 
 @router.post("/markets")
-def http_create_market(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_market.create_m, payload)
+async def http_create_market(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
+        payload={**payload, "action": "CREATE_MARKET"},
+    )
 
 
 @router.post("/markets/designate-token")
-def http_designate_market_token(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_market.designate_m_token, payload)
+async def http_designate_market_token(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
+        payload={**payload, "action": "DESIGNATE_MARKET_TOKEN"},
+    )
 
 
 @router.post("/markets/designate-result")
-def http_designate_market_result(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_market.designate_m_result, payload)
+async def http_designate_market_result(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
+        payload={**payload, "action": "DESIGNATE_MARKET_RESULT"},
+    )
 
 
 @router.post("/markets/designate-constraint")
-def http_designate_market_constraint(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_market.designate_m_contraint, payload)
+async def http_designate_market_constraint(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
+        payload={**payload, "action": "DESIGNATE_MARKET_CONSTRAINT"},
+    )
 
 
 @router.post("/markets/designate-open-to-as")
-def http_designate_market_open_to_as(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_market.designate_m_open_to_as, payload)
+async def http_designate_market_open_to_as(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
+        payload={**payload, "action": "DESIGNATE_MARKET_OPEN_TO_AS"},
+    )
 
 
 @router.post("/markets/transactions")
-def http_market_transaction(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_market.do_m_transaction, payload)
+async def http_market_transaction(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
+        payload={**payload, "action": "MARKET_TRANSACTION"},
+    )
 
 
 @router.post("/markets/payout")
-def http_market_payout(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_market.do_m_payout, payload)
+async def http_market_payout(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
+        payload={**payload, "action": "MARKET_PAYOUT"},
+    )
 
 
 @router.put("/markets/{market_id}")
-def http_update_market(
+async def http_update_market(
     market_id: int,
     payload: dict[str, Any] = Body(...),
 ):
-    return _apply(_update_market.update_m, {**payload, "market_id": market_id})
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
+        payload={**payload, "market_id": market_id, "action": "UPDATE_MARKET"},
+    )
 
 
 @router.get("/markets/stats/liquidity")
@@ -677,34 +799,54 @@ def http_read_market(
 
 
 @router.post("/users/signup")
-def http_user_signup(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_user.user_signup, payload)
+async def http_user_signup(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=USER_ACCOUNT,
+        domain="user.account",
+        payload={**payload, "action": "USER_SIGNUP"},
+    )
 
 
 @router.post("/users/login")
-def http_user_login(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_user.user_login, payload)
+async def http_user_login(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=USER_ACCOUNT,
+        domain="user.account",
+        payload={**payload, "action": "USER_LOGIN"},
+    )
 
 
 @router.post("/users/logout")
-def http_user_logout(payload: dict[str, Any] = Body(...)):
-    return _apply(_write_user.user_logout, payload)
+async def http_user_logout(payload: dict[str, Any] = Body(...)):
+    return await enqueue_command_response(
+        topic=USER_ACCOUNT,
+        domain="user.account",
+        payload={**payload, "action": "USER_LOGOUT"},
+    )
 
 
 @router.put("/users/{user_id}/profile")
-def http_update_user_profile(
+async def http_update_user_profile(
     user_id: int,
     payload: dict[str, Any] = Body(...),
 ):
     body = dict(payload)
     body.setdefault("user_id", user_id)
     body.setdefault("target_user_id", user_id)
-    return _apply(_update_user.update_user_profile, body)
+    return await enqueue_command_response(
+        topic=USER_ACCOUNT,
+        domain="user.account",
+        payload={**body, "action": "UPDATE_USER_PROFILE"},
+    )
 
 
 @router.put("/users/{user_id}/password")
-def http_update_user_password(
+async def http_update_user_password(
     user_id: int,
     payload: dict[str, Any] = Body(...),
 ):
-    return _apply(_update_user.update_user_password, {**payload, "user_id": user_id})
+    return await enqueue_command_response(
+        topic=USER_ACCOUNT,
+        domain="user.account",
+        payload={**payload, "user_id": user_id, "action": "UPDATE_USER_PASSWORD"},
+    )

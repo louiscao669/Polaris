@@ -41,7 +41,7 @@ def _apply_envelope(topic: str, envelope: dict[str, Any]) -> None:
     payload = envelope.get("payload")
     if not isinstance(payload, dict):
         raise ValueError("envelope.payload must be an object")
-    dispatch_v2_consolidated(topic, payload)
+    return dispatch_v2_consolidated(topic, payload)
 
 
 async def process_kafka_message(msg: Any, consumer_group: str) -> None:
@@ -73,7 +73,7 @@ async def process_kafka_message(msg: Any, consumer_group: str) -> None:
     update_operation_status(operation_id=oid, status="processing")
 
     try:
-        await asyncio.to_thread(_apply_envelope, msg.topic, raw)
+        result = await asyncio.to_thread(_apply_envelope, msg.topic, raw)
     except Exception as e:
         err = str(e) or repr(e)
         tb = traceback.format_exc()
@@ -89,7 +89,7 @@ async def process_kafka_message(msg: Any, consumer_group: str) -> None:
         return
 
     mark_applied(event_id=event_id_str, consumer_group=consumer_group)
-    update_operation_status(operation_id=oid, status="succeeded")
+    update_operation_status(operation_id=oid, status="succeeded", result=result)
 
 
 class MSKTokenProvider(AbstractTokenProvider):

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS operations (
   topic VARCHAR(255) NOT NULL,
   status ENUM('queued','processing','succeeded','failed','dead') NOT NULL DEFAULT 'queued',
   envelope_json JSON NOT NULL,
+  result_json JSON NULL,
   error_message TEXT NULL,
   kafka_partition INT NULL,
   kafka_offset BIGINT NULL,
@@ -15,6 +16,9 @@ CREATE TABLE IF NOT EXISTS operations (
   KEY idx_operations_status_created (status, created_at),
   KEY idx_operations_topic_created (topic, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE operations
+  ADD COLUMN IF NOT EXISTS result_json JSON NULL AFTER envelope_json;
 
 
 CREATE TABLE IF NOT EXISTS processed_events (

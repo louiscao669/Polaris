@@ -2,53 +2,26 @@
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 
+from .command_bus import enqueue_command_response
 from .auth.jwt_deps import (
     bearer_claims_optional,
     bearer_claims_required_for_operations_read,
     bearer_claims_required_for_writes,
 )
 
-from .operations_repo import (
-    fetch_operation,
-    insert_operation_pending,
-    update_operation_kafka_meta,
-    use_writer_for_operation_fetch,
-)
-from .schemas.envelope import (
-    build_envelope,
-    merge_actor_into_payload,
-)
+from .operations_repo import fetch_operation, use_writer_for_operation_fetch
 from .settings_jwt import (
     V2_OPERATIONS_REQUIRE_JWT,
-    V2_REQUIRE_JWT,
 )
 from .topics import EVENT_LIFECYCLE, MARKET_OPERATIONS, ORG_MANAGEMENT, USER_ACCOUNT
-from .v2_kafka_client import v2_kafka_producer
 
 
 router = APIRouter(prefix="/v2", tags=["v2-async"])
-
-
-def _estimate_completion() -> str:
-    return (datetime.now(timezone.utc) + timedelta(seconds=5)).isoformat()
-
-
-def _merge_payload(
-    payload: dict[str, Any],
-    claims: dict[str, Any],
-    x_user_id: str | None,
-) -> dict[str, Any]:
-    body = merge_actor_into_payload(payload, claims if claims else None)
-    if not V2_REQUIRE_JWT and x_user_id and "user_id" not in body:
-        body = {**body, "user_id": x_user_id}
-    return body
 
 
 PUBLIC_USER_ACCOUNT_ACTIONS = frozenset({"USER_SIGNUP", "USER_LOGIN"})
@@ -75,37 +48,12 @@ async def v2_market_transaction(
     claims: Annotated[dict[str, Any], Depends(bearer_claims_required_for_writes)],
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> Response:
-    body = _merge_payload(payload, claims, x_user_id)
-    env = build_envelope(
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
         domain="market.operations",
-        payload=body,
-        jwt_claims=claims if claims else None,
-    )
-    oid = env.metadata.event_id
-    envelope_dict = env.model_dump(mode="json")
-
-    market_id = body.get("market_id") or body.get("marketId")
-    key = str(market_id).encode("utf-8") if market_id is not None else None
-
-    part, off = await v2_kafka_producer.send_json(
-        topic=MARKET_OPERATIONS, value=envelope_dict, key=key
-    )
-    insert_operation_pending(
-        operation_id=oid, topic=MARKET_OPERATIONS, envelope=envelope_dict
-    )
-    update_operation_kafka_meta(operation_id=oid, partition=part, offset=off)
-
-    out = {
-        "accepted": True,
-        "operation_id": str(oid),
-        "status": "queued",
-        "received_at": env.metadata.timestamp,
-        "estimated_completion": _estimate_completion(),
-    }
-    return Response(
-        content=json.dumps(out),
-        media_type="application/json",
-        status_code=202,
+        payload=payload,
+        claims=claims,
+        x_user_id=x_user_id,
     )
 
 
@@ -115,42 +63,12 @@ async def v2_market_lifecycle(
     claims: Annotated[dict[str, Any], Depends(bearer_claims_required_for_writes)],
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> Response:
-    body = _merge_payload(payload, claims, x_user_id)
-    env = build_envelope(
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
         domain="market.operations",
-        payload=body,
-        jwt_claims=claims if claims else None,
-    )
-    oid = env.metadata.event_id
-    envelope_dict = env.model_dump(mode="json")
-
-    market_key_source = (
-        body.get("market_id")
-        or body.get("marketId")
-        or body.get("event_id")
-        or body.get("eventId")
-    )
-    key = str(market_key_source).encode("utf-8") if market_key_source is not None else None
-
-    part, off = await v2_kafka_producer.send_json(
-        topic=MARKET_OPERATIONS, value=envelope_dict, key=key
-    )
-    insert_operation_pending(
-        operation_id=oid, topic=MARKET_OPERATIONS, envelope=envelope_dict
-    )
-    update_operation_kafka_meta(operation_id=oid, partition=part, offset=off)
-
-    out = {
-        "accepted": True,
-        "operation_id": str(oid),
-        "status": "queued",
-        "received_at": env.metadata.timestamp,
-        "estimated_completion": _estimate_completion(),
-    }
-    return Response(
-        content=json.dumps(out),
-        media_type="application/json",
-        status_code=202,
+        payload=payload,
+        claims=claims,
+        x_user_id=x_user_id,
     )
 
 
@@ -160,37 +78,12 @@ async def v2_org_management(
     claims: Annotated[dict[str, Any], Depends(bearer_claims_required_for_writes)],
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> Response:
-    body = _merge_payload(payload, claims, x_user_id)
-    env = build_envelope(
+    return await enqueue_command_response(
+        topic=ORG_MANAGEMENT,
         domain="org.management",
-        payload=body,
-        jwt_claims=claims if claims else None,
-    )
-    oid = env.metadata.event_id
-    envelope_dict = env.model_dump(mode="json")
-
-    org_id = body.get("organization_id") or body.get("org_id")
-    key = str(org_id).encode("utf-8") if org_id is not None else None
-
-    part, off = await v2_kafka_producer.send_json(
-        topic=ORG_MANAGEMENT, value=envelope_dict, key=key
-    )
-    insert_operation_pending(
-        operation_id=oid, topic=ORG_MANAGEMENT, envelope=envelope_dict
-    )
-    update_operation_kafka_meta(operation_id=oid, partition=part, offset=off)
-
-    out = {
-        "accepted": True,
-        "operation_id": str(oid),
-        "status": "queued",
-        "received_at": env.metadata.timestamp,
-        "estimated_completion": _estimate_completion(),
-    }
-    return Response(
-        content=json.dumps(out),
-        media_type="application/json",
-        status_code=202,
+        payload=payload,
+        claims=claims,
+        x_user_id=x_user_id,
     )
 
 
@@ -200,37 +93,12 @@ async def v2_event_lifecycle(
     claims: Annotated[dict[str, Any], Depends(bearer_claims_required_for_writes)],
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> Response:
-    body = _merge_payload(payload, claims, x_user_id)
-    env = build_envelope(
+    return await enqueue_command_response(
+        topic=EVENT_LIFECYCLE,
         domain="event.lifecycle",
-        payload=body,
-        jwt_claims=claims if claims else None,
-    )
-    oid = env.metadata.event_id
-    envelope_dict = env.model_dump(mode="json")
-
-    event_id = body.get("event_id")
-    key = str(event_id).encode("utf-8") if event_id is not None else None
-
-    part, off = await v2_kafka_producer.send_json(
-        topic=EVENT_LIFECYCLE, value=envelope_dict, key=key
-    )
-    insert_operation_pending(
-        operation_id=oid, topic=EVENT_LIFECYCLE, envelope=envelope_dict
-    )
-    update_operation_kafka_meta(operation_id=oid, partition=part, offset=off)
-
-    out = {
-        "accepted": True,
-        "operation_id": str(oid),
-        "status": "queued",
-        "received_at": env.metadata.timestamp,
-        "estimated_completion": _estimate_completion(),
-    }
-    return Response(
-        content=json.dumps(out),
-        media_type="application/json",
-        status_code=202,
+        payload=payload,
+        claims=claims,
+        x_user_id=x_user_id,
     )
 
 
@@ -241,37 +109,12 @@ async def v2_user_account(
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> Response:
     effective_claims = _claims_for_user_account_action(payload, claims)
-    body = _merge_payload(payload, effective_claims, x_user_id)
-    env = build_envelope(
+    return await enqueue_command_response(
+        topic=USER_ACCOUNT,
         domain="user.account",
-        payload=body,
-        jwt_claims=effective_claims if effective_claims else None,
-    )
-    oid = env.metadata.event_id
-    envelope_dict = env.model_dump(mode="json")
-
-    uid = body.get("user_id")
-    key = str(uid).encode("utf-8") if uid is not None else None
-
-    part, off = await v2_kafka_producer.send_json(
-        topic=USER_ACCOUNT, value=envelope_dict, key=key
-    )
-    insert_operation_pending(
-        operation_id=oid, topic=USER_ACCOUNT, envelope=envelope_dict
-    )
-    update_operation_kafka_meta(operation_id=oid, partition=part, offset=off)
-
-    out = {
-        "accepted": True,
-        "operation_id": str(oid),
-        "status": "queued",
-        "received_at": env.metadata.timestamp,
-        "estimated_completion": _estimate_completion(),
-    }
-    return Response(
-        content=json.dumps(out),
-        media_type="application/json",
-        status_code=202,
+        payload=payload,
+        claims=effective_claims,
+        x_user_id=x_user_id,
     )
 
 
