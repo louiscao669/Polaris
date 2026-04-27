@@ -657,3 +657,75 @@ def _designate_e_closed(cursor, db, user_id, event_id):
         print(f"Transaction failed, rolled back: {e}")
 
         return _fail("validation", f"Unable to close the event: {e}")
+
+
+def delete_e(data: dict[str, Any]):
+    user_id = data.get("user_id")
+    event_id = data.get("event_id")
+
+    if user_id is None:
+        result = _fail("validation", "delete_e payload is missing required field 'user_id'.")
+        _log_result("delete_e", result)
+        return result
+
+    if event_id is None:
+        result = _fail("validation", "delete_e payload is missing required field 'event_id'.")
+        _log_result("delete_e", result)
+        return result
+
+    with get_connection() as db:
+        cursor = db.cursor()
+        result = _delete_e(cursor, db, user_id, event_id)
+    _log_result("delete_e", result)
+    return result
+
+
+def _delete_e(cursor, db, user_id, event_id):
+    try:
+        cursor.execute(
+            """
+            SELECT e.org_id
+            FROM events e
+            JOIN organization_leader ol ON e.org_id = ol.org_id
+            WHERE e.event_id = %s AND ol.user_id = %s
+            FOR UPDATE
+            """,
+            (event_id, user_id),
+        )
+        event = cursor.fetchone()
+        if event is None:
+            return _fail("permission", "Only the organization leader can delete events.")
+
+        organization_id = int(event[0])
+
+        cursor.execute(
+            """
+            SELECT id
+            FROM market
+            WHERE event_id = %s
+            """,
+            (event_id,),
+        )
+        market_ids = [int(row[0]) for row in cursor.fetchall()]
+
+        cursor.execute(
+            """
+            DELETE FROM events
+            WHERE event_id = %s
+            """,
+            (event_id,),
+        )
+        if cursor.rowcount != 1:
+            return _fail("validation", "That event does not exist.")
+
+        db.commit()
+        _invalidate_event_reads(cursor, int(event_id), organization_id)
+        for market_id in market_ids:
+            invalidate_market_detail_cache(market_id)
+
+        return True
+
+    except Exception as e:
+        db.rollback()
+        print(f"Transaction failed, rolled back: {e}")
+        return _fail("validation", f"Unable to delete the event: {e}")

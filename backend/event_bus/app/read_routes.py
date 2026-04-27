@@ -476,6 +476,11 @@ def http_designate_event_closed(payload: dict[str, Any] = Body(...)):
     return _apply(_write_event.designate_e_closed, payload)
 
 
+@router.post("/events/delete")
+def http_delete_event(payload: dict[str, Any] = Body(...)):
+    return _apply(_write_event.delete_e, payload)
+
+
 @router.put("/events/{event_id}")
 def http_update_event(
     event_id: int,

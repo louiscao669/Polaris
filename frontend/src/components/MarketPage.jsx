@@ -1063,6 +1063,9 @@ export default function MarketPage() {
                     {tradeQuoteSummary} Average price {tradeQuote.average_price} per ticket.
                   </p>
                 )}
+                <p className="market-trade-disclaimer">
+                  Prices can change in real time as other trades come in. Refresh the quote right before you place your trade.
+                </p>
                 {!tradeQuoteLoading && tradeQuoteError && <p className="market-error">{tradeQuoteError}</p>}
                 {tradeError && <p className="market-error">{tradeError}</p>}
               </form>

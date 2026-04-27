@@ -1,4 +1,4 @@
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import './EventDashboard.css';
 import InlineActionPanel from './InlineActionPanel';
@@ -34,6 +34,7 @@ function formatMemberLabel(member) {
 }
 
 export default function EventDashboard() {
+  const navigate = useNavigate();
   const { organizationId, eventId } = useParams();
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId') || getStoredUserId();
@@ -408,6 +409,22 @@ export default function EventDashboard() {
     }
   };
 
+  const submitDeleteEvent = async () => {
+    if (!canManageEvent) return;
+    setAdminError(null);
+    try {
+      await postJson('/events/delete', {
+        user_id: Number(userId),
+        event_id: Number(eventId),
+      });
+      closeAdminPanel();
+      navigate(`/organization/${organizationId}${userId ? `?userId=${userId}` : ''}`);
+    } catch (error) {
+      console.error(error);
+      setAdminError(error.message || 'Failed to delete event');
+    }
+  };
+
   return (
     <section className="event-page" aria-label="Event dashboard">
       <div className="event-shell">
@@ -507,6 +524,13 @@ export default function EventDashboard() {
                   }}
                 >
                   Add rule
+                </button>
+                <button
+                  type="button"
+                  className="ui-action-button ui-action-button--ghost"
+                  onClick={() => openAdminPanel('delete-event')}
+                >
+                  Delete event
                 </button>
               </div>
             </section>
@@ -693,6 +717,23 @@ export default function EventDashboard() {
                   setEventRuleForm((current) => ({ ...current, value: event.target.value }))
                 }
               />
+            </label>
+          </InlineActionPanel>
+        )}
+        {activeAdminPanel === 'delete-event' && (
+          <InlineActionPanel
+            title="Delete event"
+            description="This permanently removes the event and its related markets, permissions, and rules."
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitDeleteEvent();
+            }}
+            onCancel={closeAdminPanel}
+            submitLabel="Delete event"
+          >
+            <label data-span="full">
+              Event
+              <input type="text" value={eventData?.caption || 'Current event'} readOnly />
             </label>
           </InlineActionPanel>
         )}
