@@ -11,7 +11,7 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from pymysql.cursors import DictCursor
 
 from .read_cache import cache_mode
-from .database import get_connection_reader
+from .database import get_connection_reader, get_connection_writer
 
 _BF_ROOT = Path(__file__).resolve().parent / "core" / "Backend Functions"
 for _dir in (
@@ -81,6 +81,34 @@ _update_user = _load_module(
 )
 
 router = APIRouter(tags=["backend-functions"])
+
+DEFAULT_CONSTRAINT_TYPES = (
+    (
+        1,
+        "max_bets_per_user",
+        "Maximum number of bets a single user can place in this market or event.",
+    ),
+    (
+        2,
+        "max_user_volume",
+        "Maximum total token volume a single user can trade in this market or event.",
+    ),
+    (
+        3,
+        "max_total_volume",
+        "Maximum combined token volume allowed across the entire market or event.",
+    ),
+    (
+        4,
+        "max_yes_exposure_per_user",
+        "Maximum number of YES-side tickets a single user can hold.",
+    ),
+    (
+        5,
+        "max_no_exposure_per_user",
+        "Maximum number of NO-side tickets a single user can hold.",
+    ),
+)
 
 
 def _unwrap_result(result: Any) -> Any:
@@ -192,6 +220,25 @@ def _read_user_portfolio(user_id: int) -> dict[str, Any]:
 
 
 def _read_policy_metadata() -> dict[str, Any]:
+    with get_connection_writer() as conn:
+        cur = conn.cursor()
+        cur.executemany(
+            """
+            INSERT IGNORE INTO constraint_type (constraint_id, name, description)
+            VALUES (%s, %s, %s)
+            """,
+            DEFAULT_CONSTRAINT_TYPES,
+        )
+        cur.execute(
+            """
+            INSERT IGNORE INTO market_as (as_code, description) VALUES
+            ('better', 'can place bets in the market'),
+            ('viewer', 'can view market data'),
+            ('analytic', 'can access market analytics')
+            """
+        )
+        conn.commit()
+
     with get_connection_reader() as conn:
         cur = conn.cursor(DictCursor)
 
@@ -519,6 +566,30 @@ def http_stats_liquidity(
     )
 
 
+@router.get("/markets/quote")
+def http_market_quote(
+    user_id: int = Query(...),
+    market_id: int = Query(...),
+    token_id: int = Query(...),
+    side: bool = Query(...),
+    qty: int = Query(..., ge=1),
+    transaction_type: str = Query(...),
+    cache_mode_name: str = Query("default", alias="cache_mode"),
+):
+    return _apply_with_cache_mode(
+        _read_market.quote_m,
+        {
+            "user_id": user_id,
+            "market_id": market_id,
+            "token_id": token_id,
+            "side": side,
+            "qty": qty,
+            "transaction_type": transaction_type,
+        },
+        request_cache_mode=cache_mode_name,
+    )
+
+
 @router.get("/markets/stats/time-focus")
 def http_stats_time_focus(
     user_id: int = Query(...),
@@ -577,11 +648,12 @@ def http_market_points(
     user_id: int = Query(...),
     market_id: int = Query(...),
     span: int = Query(..., ge=1),
+    hours: int | None = Query(None, ge=1),
     cache_mode_name: str = Query("default", alias="cache_mode"),
 ):
     return _apply_with_cache_mode(
         _read_market.points_m,
-        {"user_id": user_id, "market_id": market_id, "span": span},
+        {"user_id": user_id, "market_id": market_id, "span": span, "hours": hours},
         request_cache_mode=cache_mode_name,
     )
 

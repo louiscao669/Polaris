@@ -24,6 +24,57 @@ function formatAccessLevel(market, membership) {
   return 'viewer';
 }
 
+function formatPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '--';
+  return `${numeric}%`;
+}
+
+function formatChartTimestamp(value) {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function buildForecastPath(points, width, height, padding) {
+  if (!Array.isArray(points) || points.length === 0) return '';
+
+  const minTimestamp = new Date(points[0]?.ts || 0).getTime();
+  const maxTimestamp = new Date(points[points.length - 1]?.ts || 0).getTime();
+  const hasTimeSpread = Number.isFinite(minTimestamp) && Number.isFinite(maxTimestamp) && maxTimestamp > minTimestamp;
+
+  if (points.length === 1) {
+    const y = padding + ((100 - Number(points[0]?.yes_price || 0)) / 100) * (height - padding * 2);
+    return `M ${padding} ${y} L ${width - padding} ${y}`;
+  }
+
+  return points
+    .map((point, index) => {
+      const timestamp = new Date(point?.ts || 0).getTime();
+      const ratio = hasTimeSpread
+        ? Math.min(1, Math.max(0, (timestamp - minTimestamp) / (maxTimestamp - minTimestamp)))
+        : index / (points.length - 1);
+      const x = padding + ratio * (width - padding * 2);
+      const y = padding + ((100 - Number(point?.yes_price || 0)) / 100) * (height - padding * 2);
+      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+    })
+    .join(' ');
+}
+
+const FORECAST_WINDOWS = [
+  { value: 'auto', label: 'Auto', hours: null },
+  { value: '1h', label: '1H', hours: 1 },
+  { value: '24h', label: '24H', hours: 24 },
+  { value: '168h', label: '7D', hours: 168 },
+  { value: 'all', label: 'All', hours: null },
+];
+
 export default function MarketPage() {
   const { organizationId, eventId, marketId } = useParams();
   const [searchParams] = useSearchParams();
@@ -37,10 +88,18 @@ export default function MarketPage() {
   const [marketError, setMarketError] = useState(null);
   const [tradeError, setTradeError] = useState(null);
   const [tradeSubmitting, setTradeSubmitting] = useState(false);
+  const [tradeQuote, setTradeQuote] = useState(null);
+  const [tradeQuoteLoading, setTradeQuoteLoading] = useState(false);
+  const [tradeQuoteError, setTradeQuoteError] = useState(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState(null);
   const [analytics, setAnalytics] = useState(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastError, setForecastError] = useState(null);
+  const [forecastSnapshot, setForecastSnapshot] = useState(null);
+  const [forecastPoints, setForecastPoints] = useState([]);
+  const [forecastWindow, setForecastWindow] = useState('auto');
   const [adminError, setAdminError] = useState(null);
   const [organizationData, setOrganizationData] = useState(null);
   const [activeAdminPanel, setActiveAdminPanel] = useState(null);
@@ -69,8 +128,8 @@ export default function MarketPage() {
     );
   }, [membership, market]);
   const roleView = getMarketAccessView(matchingAccessRole?.as_id);
-  const canBet = roleView === 'bettor';
-  const canViewAnalytics = roleView === 'analyzer';
+  const canBet = !!market?.is_leader || roleView === 'bettor';
+  const canViewAnalytics = !!market?.is_leader || roleView === 'analyzer';
   const canManageMarket = !!userId && (market?.is_leader || Number(market?.created_by) === Number(userId));
 
   const allowedTokenIds = useMemo(
@@ -97,6 +156,19 @@ export default function MarketPage() {
   const organizationRoles = Array.isArray(organizationData?.roles) ? organizationData.roles : [];
   const availableConstraints = Array.isArray(policyOptions?.constraints) ? policyOptions.constraints : [];
   const availableMarketAccess = Array.isArray(policyOptions?.market_access) ? policyOptions.market_access : [];
+  const constraintDetailsById = useMemo(
+    () =>
+      Object.fromEntries(
+        availableConstraints.map((constraint) => [
+          String(constraint.constraint_id),
+          {
+            name: constraint.name || `Constraint ${constraint.constraint_id}`,
+            description: constraint.description || '',
+          },
+        ])
+      ),
+    [availableConstraints]
+  );
 
   const roleNameById = useMemo(
     () =>
@@ -245,6 +317,57 @@ export default function MarketPage() {
   }, [market?.organization_id, userId]);
 
   useEffect(() => {
+    if (
+      !canBet ||
+      !Number.isFinite(numericUserId) ||
+      !Number.isFinite(numericMarketId) ||
+      !tradeForm.tokenId ||
+      Number(tradeForm.qty) <= 0
+    ) {
+      setTradeQuote(null);
+      setTradeQuoteError(null);
+      setTradeQuoteLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadTradeQuote = async () => {
+      setTradeQuoteLoading(true);
+      setTradeQuoteError(null);
+      try {
+        const query = new URLSearchParams({
+          user_id: String(numericUserId),
+          market_id: String(numericMarketId),
+          token_id: String(Number(tradeForm.tokenId)),
+          side: String(tradeForm.side === 'YES'),
+          qty: String(Number(tradeForm.qty)),
+          transaction_type: tradeForm.transactionType,
+        });
+        const data = await readJson(`/markets/quote?${query.toString()}`);
+        if (!cancelled) {
+          setTradeQuote(data);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setTradeQuote(null);
+          setTradeQuoteError(error.message || 'Failed to load trade quote');
+        }
+      } finally {
+        if (!cancelled) {
+          setTradeQuoteLoading(false);
+        }
+      }
+    };
+
+    loadTradeQuote();
+    return () => {
+      cancelled = true;
+    };
+  }, [canBet, numericUserId, numericMarketId, tradeForm]);
+
+  useEffect(() => {
     if (!showAnalytics || !canViewAnalytics || !Number.isFinite(numericUserId) || !Number.isFinite(numericMarketId)) {
       setAnalytics(null);
       setAnalyticsError(null);
@@ -297,20 +420,78 @@ export default function MarketPage() {
     };
   }, [showAnalytics, canViewAnalytics, numericUserId, numericMarketId]);
 
+  useEffect(() => {
+    if (!Number.isFinite(numericUserId) || !Number.isFinite(numericMarketId)) {
+      setForecastSnapshot(null);
+      setForecastPoints([]);
+      setForecastError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadForecast = async () => {
+      setForecastLoading(true);
+      setForecastError(null);
+      try {
+        const q = `user_id=${encodeURIComponent(String(numericUserId))}&market_id=${encodeURIComponent(
+          String(numericMarketId)
+        )}`;
+        const selectedWindow = FORECAST_WINDOWS.find((option) => option.value === forecastWindow) || FORECAST_WINDOWS[0];
+        const pointsParams =
+          selectedWindow.value === 'auto'
+            ? `${q}&span=200`
+            : `${q}&span=200${selectedWindow.hours ? `&hours=${selectedWindow.hours}` : ''}`;
+        const [liquidity, points] = await Promise.all([
+          readJson(`/markets/stats/liquidity?${q}`),
+          readJson(`/markets/points?${pointsParams}`),
+        ]);
+        if (cancelled) return;
+        setForecastSnapshot(liquidity);
+        setForecastPoints(Array.isArray(points) ? points : []);
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setForecastSnapshot(null);
+          setForecastPoints([]);
+          setForecastError(error.message || 'Failed to load forecast');
+        }
+      } finally {
+        if (!cancelled) {
+          setForecastLoading(false);
+        }
+      }
+    };
+
+    loadForecast();
+    return () => {
+      cancelled = true;
+    };
+  }, [numericUserId, numericMarketId, forecastWindow]);
+
   const handleTradeChange = (field) => (event) => {
     setTradeForm((current) => ({ ...current, [field]: event.target.value }));
   };
 
   const refreshAfterTrade = async () => {
     if (!Number.isFinite(numericUserId) || !Number.isFinite(numericMarketId)) return;
-    const data = await readJson(
-      `/markets/${numericMarketId}?user_id=${encodeURIComponent(String(numericUserId))}`
-    );
+    const q = `user_id=${encodeURIComponent(String(numericUserId))}&market_id=${encodeURIComponent(
+      String(numericMarketId)
+    )}`;
+    const selectedWindow = FORECAST_WINDOWS.find((option) => option.value === forecastWindow) || FORECAST_WINDOWS[0];
+    const pointsParams =
+      selectedWindow.value === 'auto'
+        ? `${q}&span=200`
+        : `${q}&span=200${selectedWindow.hours ? `&hours=${selectedWindow.hours}` : ''}`;
+    const [data, liquidity, points] = await Promise.all([
+      readJson(`/markets/${numericMarketId}?user_id=${encodeURIComponent(String(numericUserId))}`),
+      readJson(`/markets/stats/liquidity?${q}`),
+      readJson(`/markets/points?${pointsParams}`),
+    ]);
     setMarket(data);
+    setForecastSnapshot(liquidity);
+    setForecastPoints(Array.isArray(points) ? points : []);
     if (showAnalytics && canViewAnalytics) {
-      const q = `user_id=${encodeURIComponent(String(numericUserId))}&market_id=${encodeURIComponent(
-        String(numericMarketId)
-      )}`;
       const [liquidity, timeFocus, whales, tradeDistribution, windowComparison, points] =
         await Promise.all([
           readJson(`/markets/stats/liquidity?${q}`),
@@ -330,6 +511,24 @@ export default function MarketPage() {
       });
     }
   };
+
+  const chartPath = buildForecastPath(forecastPoints, 360, 180, 18);
+  const latestForecastPoint =
+    forecastPoints.length > 0 ? forecastPoints[forecastPoints.length - 1] : null;
+  const yesForecast = latestForecastPoint?.yes_price ?? forecastSnapshot?.yes_price;
+  const noForecast = latestForecastPoint?.no_price ?? forecastSnapshot?.no_price;
+  const forecastStartLabel = forecastPoints[0]?.ts ? formatChartTimestamp(forecastPoints[0].ts) : 'Start';
+  const forecastEndLabel =
+    forecastPoints.length > 0 ? formatChartTimestamp(forecastPoints[forecastPoints.length - 1].ts) : 'Now';
+  const forecastWindowLabel =
+    (FORECAST_WINDOWS.find((option) => option.value === forecastWindow) || FORECAST_WINDOWS[0]).label;
+  const tradeQuoteSummary = tradeQuote
+    ? `${tradeQuote.transaction_type === 'BUY' ? 'Buying' : 'Selling'} ${tradeQuote.qty} ${
+        tradeQuote.side ? 'YES' : 'NO'
+      } ticket${tradeQuote.qty === 1 ? '' : 's'} for ${tradeQuote.total_token_value} token${
+        tradeQuote.total_token_value === 1 ? '' : 's'
+      }.`
+    : null;
 
   const handleSubmitTrade = async (event) => {
     event.preventDefault();
@@ -746,30 +945,69 @@ export default function MarketPage() {
           {marketError && <p className="market-error">{marketError}</p>}
         </header>
 
-        <section className="market-grid">
-          <article className="market-card">
-            <h2>Market State</h2>
-            <ul className="market-list">
-              <li>Organization: {market?.organization_id ?? '-'}</li>
-              <li>
-                Allowed tokens:{' '}
-        {allowedTokenIds.length
-                  ? allowedTokenIds.map((tokenId) => tokenNameById[String(tokenId)] || `Token #${tokenId}`).join(', ')
-                  : 'None'}
-              </li>
-              <li>Access role: {accessLevelLabel}</li>
-              <li>Created: {market?.created_at ? new Date(market.created_at).toLocaleString() : 'Unknown'}</li>
-              <li>Close at: {market?.close_at ? new Date(market.close_at).toLocaleString() : 'Not scheduled'}</li>
-              <li>
-                Result:{' '}
-                {market?.result
-                  ? `${market.result.outcome ? 'YES' : 'NO'} at ${new Date(market.result.resolved_at).toLocaleString()}`
-                  : 'Unresolved'}
-              </li>
-            </ul>
+        <section className="market-primary">
+          <article className="market-card market-card--forecast market-card--hero">
+            <h2>Current Forecast</h2>
+            {forecastLoading && <p className="market-muted">Loading forecast...</p>}
+            {forecastError && <p className="market-error">{forecastError}</p>}
+            {!forecastLoading && !forecastError && (
+              <>
+                <div className="market-forecast-pills">
+                  <div className="market-forecast-pill market-forecast-pill--yes">
+                    <span>YES</span>
+                    <strong>{formatPercent(yesForecast)}</strong>
+                  </div>
+                  <div className="market-forecast-pill market-forecast-pill--no">
+                    <span>NO</span>
+                    <strong>{formatPercent(noForecast)}</strong>
+                  </div>
+                </div>
+                <div className="market-forecast-toolbar">
+                  <div className="market-forecast-toolbar__copy">
+                    <span>History window</span>
+                    <strong>{forecastWindowLabel}</strong>
+                  </div>
+                  <label className="market-forecast-toolbar__select">
+                    <span className="sr-only">Choose forecast time range</span>
+                    <select value={forecastWindow} onChange={(event) => setForecastWindow(event.target.value)}>
+                      {FORECAST_WINDOWS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="market-forecast-chart" role="img" aria-label="Forecast trend">
+                  {chartPath ? (
+                    <svg viewBox="0 0 360 180" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="forecastLine" x1="0%" x2="100%" y1="0%" y2="0%">
+                          <stop offset="0%" stopColor="#7dd3fc" />
+                          <stop offset="100%" stopColor="#34d399" />
+                        </linearGradient>
+                      </defs>
+                      <path className="market-forecast-chart__grid" d="M 18 18 L 18 162 L 342 162" />
+                      <path className="market-forecast-chart__line" d={chartPath} />
+                    </svg>
+                  ) : (
+                    <div className="market-forecast-chart__empty">No trading history yet.</div>
+                  )}
+                </div>
+                <div className="market-forecast-axis">
+                  <span>{forecastStartLabel}</span>
+                  <span>{forecastEndLabel}</span>
+                </div>
+                <p className="market-muted">
+                  {forecastSnapshot
+                    ? `Pool ${forecastSnapshot.total_pool} · Open tickets ${forecastSnapshot.open_tickets} · Trades ${forecastSnapshot.trade_count}`
+                    : 'Forecast updates will appear here as trading activity comes in.'}
+                </p>
+              </>
+            )}
           </article>
 
-          <article className="market-card">
+          <article className="market-card market-card--betting market-card--hero">
             <h2>Betting</h2>
             {!canBet && (
               <p className="market-muted">
@@ -819,9 +1057,66 @@ export default function MarketPage() {
                 >
                   {tradeSubmitting ? 'Submitting…' : 'Place Trade'}
                 </button>
+                {tradeQuoteLoading && <p className="market-trade-quote">Updating trade quote...</p>}
+                {!tradeQuoteLoading && tradeQuoteSummary && (
+                  <p className="market-trade-quote">
+                    {tradeQuoteSummary} Average price {tradeQuote.average_price} per ticket.
+                  </p>
+                )}
+                {!tradeQuoteLoading && tradeQuoteError && <p className="market-error">{tradeQuoteError}</p>}
                 {tradeError && <p className="market-error">{tradeError}</p>}
               </form>
             )}
+          </article>
+        </section>
+
+        <section className="market-supporting">
+          <article className="market-card">
+            <h2>Rules</h2>
+            {!Array.isArray(market?.constraints) || market.constraints.length === 0 ? (
+              <p className="market-muted">No market rules have been attached yet.</p>
+            ) : (
+              <ul className="market-list">
+                {market.constraints.map((constraint) => {
+                  const details = constraintDetailsById[String(constraint.constraint_id)];
+                  const name = details?.name || `Constraint #${constraint.constraint_id}`;
+                  const description = details?.description;
+                  return (
+                    <li key={`${constraint.constraint_id}-${constraint.value}`}>
+                      <div>
+                        <strong>{name}</strong>
+                        <span>
+                          Limit: {constraint.value}
+                          {description ? ` · ${description}` : ''}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </article>
+
+          <article className="market-card">
+            <h2>Market State</h2>
+            <ul className="market-list">
+              <li>Organization: {market?.organization_id ?? '-'}</li>
+              <li>
+                Allowed tokens:{' '}
+                {allowedTokenIds.length
+                  ? allowedTokenIds.map((tokenId) => tokenNameById[String(tokenId)] || `Token #${tokenId}`).join(', ')
+                  : 'None'}
+              </li>
+              <li>Access role: {accessLevelLabel}</li>
+              <li>Created: {market?.created_at ? new Date(market.created_at).toLocaleString() : 'Unknown'}</li>
+              <li>Close at: {market?.close_at ? new Date(market.close_at).toLocaleString() : 'Not scheduled'}</li>
+              <li>
+                Result:{' '}
+                {market?.result
+                  ? `${market.result.outcome ? 'YES' : 'NO'} at ${new Date(market.result.resolved_at).toLocaleString()}`
+                  : 'Unresolved'}
+              </li>
+            </ul>
           </article>
         </section>
 

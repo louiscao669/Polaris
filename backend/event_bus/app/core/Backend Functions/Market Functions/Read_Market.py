@@ -31,6 +31,46 @@ def _cache_success(key: str, value: Any, ttl_seconds: float) -> Any:
     market_read_cache.set(key, value, ttl_seconds)
     return value
 
+
+def quote_m(data: dict[str, Any]):
+    user_id = data.get("user_id")
+    market_id = data.get("market_id")
+    token_id = data.get("token_id")
+    side = data.get("side")
+    qty = data.get("qty")
+    transaction_type = data.get("transaction_type")
+
+    if user_id is None:
+        result = _fail("validation", "quote_m payload is missing required field 'user_id'.")
+        _log_result("quote_m", result)
+        return result
+    if market_id is None:
+        result = _fail("validation", "quote_m payload is missing required field 'market_id'.")
+        _log_result("quote_m", result)
+        return result
+    if token_id is None:
+        result = _fail("validation", "quote_m payload is missing required field 'token_id'.")
+        _log_result("quote_m", result)
+        return result
+    if side is None:
+        result = _fail("validation", "quote_m payload is missing required field 'side'.")
+        _log_result("quote_m", result)
+        return result
+    if qty is None:
+        result = _fail("validation", "quote_m payload is missing required field 'qty'.")
+        _log_result("quote_m", result)
+        return result
+    if transaction_type is None:
+        result = _fail("validation", "quote_m payload is missing required field 'transaction_type'.")
+        _log_result("quote_m", result)
+        return result
+
+    with get_connection_reader() as db:
+        cursor = db.cursor()
+        result = _quote_m(cursor, db, user_id, market_id, token_id, side, qty, transaction_type)
+    _log_result("quote_m", result)
+    return result
+
 def stats_m_liquidity(data: dict[str, Any]): 
     user_id = data.get("user_id")
     market_id = data.get("market_id")
@@ -124,6 +164,75 @@ def _stats_m_liquidity(cursor, db, user_id, market_id):
         print(f"Failed to retrieve market liquidity statistics: {e}")
 
         return _fail("validation", f"Failed to retrieve market liquidity statistics: {e}")
+
+
+def _quote_m(cursor, db, user_id, market_id, token_id, side, qty, transaction_type):
+    try:
+        qty = int(qty)
+        token_id = int(token_id)
+        if qty <= 0:
+            return _fail("validation", "Trade quantity must be greater than zero.")
+        if transaction_type not in ("BUY", "SELL"):
+            return _fail("validation", "Transaction type must be BUY or SELL.")
+
+        normalized_side = bool(side)
+
+        cursor.execute(
+            """
+            SELECT m.is_open
+            FROM market m
+            WHERE m.id = %s
+            """,
+            (market_id,),
+        )
+        market_row = cursor.fetchone()
+        if market_row is None:
+            return _fail("validation", "That market does not exist.")
+        if market_row[0] == 0:
+            return _fail("not_open", "That market is not open for trading.")
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM market m
+            JOIN events e ON m.event_id = e.event_id
+            LEFT JOIN organization_leader ol ON e.org_id = ol.org_id AND ol.user_id = %s
+            LEFT JOIN market_open_to_as mota ON m.id = mota.market_id
+            LEFT JOIN user_org_role uor ON mota.org_id = uor.org_id AND mota.role_id = uor.role_id AND uor.user_id = %s
+            WHERE m.id = %s AND (ol.user_id IS NOT NULL OR uor.user_id IS NOT NULL)
+            """,
+            (user_id, user_id, market_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("permission", "You do not have permission to trade in that market.")
+
+        cursor.execute(
+            """
+            SELECT 1
+            FROM market_tokens_allowed
+            WHERE market_id = %s AND token_id = %s
+            """,
+            (market_id, token_id),
+        )
+        if cursor.fetchone() is None:
+            return _fail("validation", "That token is not allowed in the market.")
+
+        total_token_value, average_price = _average_fill_from_logs(
+            cursor, market_id, normalized_side, qty, transaction_type
+        )
+
+        return {
+            "market_id": int(market_id),
+            "token_id": token_id,
+            "transaction_type": transaction_type,
+            "side": normalized_side,
+            "qty": qty,
+            "total_token_value": int(total_token_value),
+            "average_price": int(average_price),
+        }
+    except Exception as e:
+        print(f"Failed to quote market transaction: {e}")
+        return _fail("validation", f"Failed to quote market transaction: {e}")
 
 def stats_m_time_focus(data: dict[str, Any]): 
     user_id = data.get("user_id")
@@ -323,6 +432,7 @@ def points_m(data: dict[str, Any]):
     user_id = data.get("user_id")
     market_id = data.get("market_id")
     span = data.get("span")
+    hours = data.get("hours")
 
     if user_id is None:
         result = _fail("validation", "points_m payload is missing required field 'user_id'.")
@@ -339,14 +449,26 @@ def points_m(data: dict[str, Any]):
         _log_result("points_m", result)
         return result
 
+    if hours is not None:
+        try:
+            hours = int(hours)
+        except (TypeError, ValueError):
+            result = _fail("validation", "points_m payload field 'hours' must be an integer.")
+            _log_result("points_m", result)
+            return result
+        if hours <= 0:
+            result = _fail("validation", "points_m payload field 'hours' must be greater than zero.")
+            _log_result("points_m", result)
+            return result
+
     with get_connection_reader() as db:
         cursor = db.cursor()
-        result = _points_m(cursor, db, user_id, market_id, span)
+        result = _points_m(cursor, db, user_id, market_id, span, hours)
     _log_result("points_m", result)
     return result
 
 
-def _points_m(cursor, db, user_id, market_id, span): 
+def _points_m(cursor, db, user_id, market_id, span, hours=None): 
 
     try:
         # Check if user has permission to view market points (or is organization leader)
@@ -366,21 +488,65 @@ def _points_m(cursor, db, user_id, market_id, span):
         if cursor.fetchone() is None:
             return _fail("permission", "You do not have permission to view market points.")
 
-        # Build chart points directly from executed trades so graph visualizations follow market history.
-        cursor.execute(
-            """
-            SELECT transaction_id, ts, side, type, amt, price
-            FROM market_transaction
-            WHERE market_id = %s
-            ORDER BY ts ASC, transaction_id ASC
-            LIMIT %s
-            """,
-            (market_id, span),
-        )
-
         points = []
         yes_pool = 0
         no_pool = 0
+
+        if hours is not None:
+            # Seed pools from all earlier trades so shorter windows still chart the real
+            # price level at the beginning of the selected period.
+            cursor.execute(
+                """
+                SELECT side, type, COALESCE(SUM(amt * price), 0) AS total_value
+                FROM market_transaction
+                WHERE market_id = %s
+                  AND ts < (UTC_TIMESTAMP() - INTERVAL %s HOUR)
+                GROUP BY side, type
+                """,
+                (market_id, hours),
+            )
+
+            for side_value, transaction_type, total_value in cursor.fetchall():
+                signed_value = total_value if transaction_type == "BUY" else -total_value
+                if bool(side_value):
+                    yes_pool += signed_value
+                else:
+                    no_pool += signed_value
+
+            yes_pool = max(yes_pool, 0)
+            no_pool = max(no_pool, 0)
+
+            cursor.execute(
+                """
+                SELECT transaction_id, ts, side, type, amt, price
+                FROM (
+                    SELECT transaction_id, ts, side, type, amt, price
+                    FROM market_transaction
+                    WHERE market_id = %s
+                      AND ts >= (UTC_TIMESTAMP() - INTERVAL %s HOUR)
+                    ORDER BY ts DESC, transaction_id DESC
+                    LIMIT %s
+                ) recent_points
+                ORDER BY ts ASC, transaction_id ASC
+                """,
+                (market_id, hours, span),
+            )
+        else:
+            # Build chart points directly from executed trades so graph visualizations follow market history.
+            cursor.execute(
+                """
+                SELECT transaction_id, ts, side, type, amt, price
+                FROM (
+                    SELECT transaction_id, ts, side, type, amt, price
+                    FROM market_transaction
+                    WHERE market_id = %s
+                    ORDER BY ts DESC, transaction_id DESC
+                    LIMIT %s
+                ) recent_points
+                ORDER BY ts ASC, transaction_id ASC
+                """,
+                (market_id, span),
+            )
 
         for transaction_id, ts, side_value, transaction_type, amt, price in cursor.fetchall():
             trade_value = amt * price

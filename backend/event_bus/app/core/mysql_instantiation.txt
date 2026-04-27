@@ -93,6 +93,13 @@ CREATE TABLE IF NOT EXISTS `constraint_type` (
     `description` varchar(255)
 );
 
+INSERT IGNORE INTO `constraint_type` (`constraint_id`, `name`, `description`) VALUES
+(1, 'max_bets_per_user', 'Maximum number of bets a single user can place in this market or event.'),
+(2, 'max_user_volume', 'Maximum total token volume a single user can trade in this market or event.'),
+(3, 'max_total_volume', 'Maximum combined token volume allowed across the entire market or event.'),
+(4, 'max_yes_exposure_per_user', 'Maximum number of YES-side tickets a single user can hold.'),
+(5, 'max_no_exposure_per_user', 'Maximum number of NO-side tickets a single user can hold.');
+
 -- event objects
 
 CREATE TABLE IF NOT EXISTS `events` (
