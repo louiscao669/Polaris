@@ -825,6 +825,15 @@ async def http_user_logout(payload: dict[str, Any] = Body(...)):
     )
 
 
+@router.post("/auth/login")
+def http_auth_login(payload: dict[str, Any] = Body(...)):
+    body = {
+        "username": payload.get("username", payload.get("email", payload.get("login_identifier"))),
+        "password": payload.get("password"),
+    }
+    return _apply(_write_user.user_login, body)
+
+
 @router.put("/users/{user_id}/profile")
 async def http_update_user_profile(
     user_id: int,

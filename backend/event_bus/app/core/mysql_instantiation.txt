@@ -288,3 +288,35 @@ CREATE TABLE IF NOT EXISTS `market_price_snapshot` (
         foreign key (`market_id`) references `market`(`id`)
         on delete cascade
 );
+
+-- async operations / event bus support
+
+CREATE TABLE IF NOT EXISTS `operations` (
+    `operation_id` char(36) not null,
+    `topic` varchar(255) not null,
+    `status` enum('queued', 'processing', 'succeeded', 'failed', 'dead') not null default 'queued',
+    `envelope_json` json not null,
+    `result_json` json null,
+    `error_message` text null,
+    `kafka_partition` int null,
+    `kafka_offset` bigint null,
+    `created_at` timestamp not null default current_timestamp,
+    `updated_at` timestamp not null default current_timestamp on update current_timestamp,
+    primary key (`operation_id`),
+    key `idx_operations_status_created` (`status`, `created_at`),
+    key `idx_operations_topic_created` (`topic`, `created_at`)
+);
+
+CREATE TABLE IF NOT EXISTS `processed_events` (
+    `event_id` char(36) not null,
+    `consumer_group` varchar(255) not null,
+    `topic` varchar(255) not null,
+    `kafka_partition` int not null,
+    `kafka_offset` bigint not null,
+    `status` enum('received', 'applied', 'skipped_duplicate', 'failed') not null default 'received',
+    `processed_at` timestamp null default null,
+    `error_message` text null,
+    primary key (`event_id`, `consumer_group`),
+    unique key `uniq_consumer_partition_offset` (`consumer_group`, `topic`, `kafka_partition`, `kafka_offset`),
+    key `idx_processed_events_processed_at` (`processed_at`)
+);
