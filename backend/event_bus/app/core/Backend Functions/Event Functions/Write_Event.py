@@ -397,7 +397,7 @@ def _designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value):
         # Check if user is the organization leader and lock the event row
         cursor.execute(
             """
-            SELECT e.is_open
+            SELECT e.org_id, e.is_open
             FROM events e
             JOIN organization_leader ol ON e.org_id = ol.org_id
             WHERE e.event_id = %s AND ol.user_id = %s
@@ -410,7 +410,7 @@ def _designate_e_contraint(cursor, db, user_id, event_id, constraint_id, value):
             return _fail("permission", "Only the organization leader can designate event constraints.")
 
         # Check if the event is open
-        if event[0] == 0:
+        if event[1] == 0:
             return _fail("not_open", "That event is already closed.")
 
         # Check if the constraint is valid
@@ -608,7 +608,7 @@ def _designate_e_closed(cursor, db, user_id, event_id):
         # Check if user is the organization leader and lock the event row
         cursor.execute(
             """
-            SELECT e.is_open
+            SELECT e.org_id, e.is_open
             FROM events e
             JOIN organization_leader ol ON e.org_id = ol.org_id
             WHERE e.event_id = %s AND ol.user_id = %s
@@ -621,7 +621,7 @@ def _designate_e_closed(cursor, db, user_id, event_id):
             return _fail("permission", "Only the organization leader can close events.")
 
         # Check if event is already closed
-        if event[0] == 0:
+        if event[1] == 0:
             return True
 
         # Check if markets are all closed for the event

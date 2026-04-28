@@ -67,6 +67,14 @@ function buildForecastPath(points, width, height, padding) {
     .join(' ');
 }
 
+function buildMarketDetailPath(marketId, userId) {
+  const query = new URLSearchParams({
+    user_id: String(userId),
+    cache_mode: 'bypass',
+  });
+  return `/markets/${marketId}?${query.toString()}`;
+}
+
 const FORECAST_WINDOWS = [
   { value: 'auto', label: 'Auto', hours: null },
   { value: '1h', label: '1H', hours: 1 },
@@ -261,7 +269,7 @@ export default function MarketPage() {
       setMarketLoading(true);
       setMarketError(null);
       try {
-        const data = await readJson(`/markets/${marketId}?user_id=${encodeURIComponent(userId)}`);
+        const data = await readJson(buildMarketDetailPath(marketId, userId));
         if (cancelled) return;
         setMarket(data);
         setTradeForm((current) => ({
@@ -484,7 +492,7 @@ export default function MarketPage() {
         ? `${q}&span=200`
         : `${q}&span=200${selectedWindow.hours ? `&hours=${selectedWindow.hours}` : ''}`;
     const [data, liquidity, points] = await Promise.all([
-      readJson(`/markets/${numericMarketId}?user_id=${encodeURIComponent(String(numericUserId))}`),
+      readJson(buildMarketDetailPath(numericMarketId, numericUserId)),
       readJson(`/markets/stats/liquidity?${q}`),
       readJson(`/markets/points?${pointsParams}`),
     ]);
