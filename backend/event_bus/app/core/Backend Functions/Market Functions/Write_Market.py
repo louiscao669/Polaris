@@ -398,7 +398,15 @@ def _designate_m_result(cursor, db, user_id, market_id, result):
         token_rows = cursor.fetchall()
 
         for token_row in token_rows:
-            payout_result = _do_m_payout(cursor, db, user_id, market_id, token_row[0])
+            payout_result = _do_m_payout(
+                cursor,
+                db,
+                user_id,
+                market_id,
+                token_row[0],
+                manage_transaction=False,
+                invalidate_cache=False,
+            )
             if isinstance(payout_result, dict) and payout_result.get("ok") is False:
                 return payout_result
 
@@ -918,7 +926,16 @@ def do_m_payout(data: dict[str, Any]):
     return result
 
 
-def _do_m_payout(cursor, db, user_id, market_id, token_id): 
+def _do_m_payout(
+    cursor,
+    db,
+    user_id,
+    market_id,
+    token_id,
+    *,
+    manage_transaction=True,
+    invalidate_cache=True,
+): 
 
     try:
         # Lock the market row before checking payout status
@@ -993,9 +1010,9 @@ def _do_m_payout(cursor, db, user_id, market_id, token_id):
                 (market_id, token_id),
             )
         except pymysql.err.IntegrityError as e:
-            db.rollback()
-
             if e.args and e.args[0] == 1062:
+                if manage_transaction:
+                    db.rollback()
                 return True
 
             raise
@@ -1047,14 +1064,17 @@ def _do_m_payout(cursor, db, user_id, market_id, token_id):
                 (market_id,),
             )
 
-        db.commit()
-        invalidate_market_stats_cache(int(market_id))
+        if manage_transaction:
+            db.commit()
+        if invalidate_cache:
+            invalidate_market_stats_cache(int(market_id))
 
         return True
 
     except Exception as e:
         # prevent sql transaction from partially executing and leaving the database in an inconsistent state
-        db.rollback()
+        if manage_transaction:
+            db.rollback()
         print(f"Transaction failed, rolled back: {e}")
 
         return _fail("validation", f"Unable to execute the market payout: {e}")

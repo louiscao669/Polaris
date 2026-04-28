@@ -57,6 +57,21 @@ async def v2_market_transaction(
     )
 
 
+@router.post("/markets/payout")
+async def v2_market_payout(
+    payload: dict[str, Any],
+    claims: Annotated[dict[str, Any], Depends(bearer_claims_required_for_writes)],
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> Response:
+    return await enqueue_command_response(
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
+        payload=payload,
+        claims=claims,
+        x_user_id=x_user_id,
+    )
+
+
 @router.post("/markets/lifecycle")
 async def v2_market_lifecycle(
     payload: dict[str, Any],
