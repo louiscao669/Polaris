@@ -95,7 +95,7 @@ export default function SignIn(props) {
       password: String(data.get('password') ?? ''),
     };
     try {
-      const result = await postJson('/users/login', payload);
+      const result = await postJson('/auth/login', payload);
       if (result?.user_id != null) {
         saveAuth({
           userId: result.user_id,

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import OrganizationMembership from './OrganizationMembership';
 import InlineActionPanel from './InlineActionPanel';
-import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
+import { readJson, submitAndAwaitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { formatRoleOption } from '../lib/policyOptions';
 
@@ -162,14 +162,11 @@ function Organization() {
   const handleCreateNewEvent = async () => {
     try {
       if (createEventForm.name.trim() && userId && normalizedOrganizationId != null && canManageOrganization) {
-        const op = await submitV2Operation('/events/lifecycle', {
+        await submitAndAwaitV2Operation('/events/lifecycle', {
           action: 'CREATE_EVENT',
           user_id: Number(userId),
           organization_id: normalizedOrganizationId,
           caption: createEventForm.name.trim(),
-        });
-        await pollOperation(op.operation_id, {
-          headers: { 'X-Force-Leader': 'true' },
         });
         setCreateEventForm({ name: '' });
         closeAdminPanel();
@@ -187,8 +184,10 @@ function Organization() {
     if (!editOrganizationForm.name.trim() || !canManageOrganization) return;
     setAdminError(null);
     try {
-      await putJson(`/organizations/${normalizedOrganizationId}`, {
+      await submitAndAwaitV2Operation('/org/management', {
+        action: 'UPDATE_ORGANIZATION',
         user_id: Number(userId),
+        organization_id: normalizedOrganizationId,
         name: editOrganizationForm.name.trim(),
         description: editOrganizationForm.description.trim(),
       });
@@ -204,7 +203,8 @@ function Organization() {
     if (!createRoleForm.name.trim() || !canManageOrganization) return;
     setAdminError(null);
     try {
-      await postJson('/organization-roles', {
+      await submitAndAwaitV2Operation('/org/management', {
+        action: 'CREATE_ORGANIZATION_ROLE',
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
         name: createRoleForm.name.trim(),
@@ -223,7 +223,8 @@ function Organization() {
     if (!createTokenForm.name.trim() || !canManageOrganization) return;
     setAdminError(null);
     try {
-      await postJson('/organization-tokens', {
+      await submitAndAwaitV2Operation('/org/management', {
+        action: 'CREATE_ORGANIZATION_TOKEN',
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
         token_name: createTokenForm.name.trim(),
@@ -251,7 +252,8 @@ function Organization() {
     if (!assignRoleForm.targetUserId || !assignRoleForm.roleId || !canManageOrganization) return;
     setAdminError(null);
     try {
-      await postJson('/organization-members', {
+      await submitAndAwaitV2Operation('/org/management', {
+        action: 'CREATE_ORGANIZATION_MEMBER',
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
         target_user_id: Number(assignRoleForm.targetUserId),
@@ -286,7 +288,8 @@ function Organization() {
     }
     setAdminError(null);
     try {
-      await postJson('/organization-token-grants', {
+      await submitAndAwaitV2Operation('/org/management', {
+        action: 'GRANT_ORGANIZATION_TOKEN',
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
         token_id: Number(grantTokensForm.tokenId),
@@ -312,7 +315,8 @@ function Organization() {
     if (!removeMemberForm.targetUserId || !canManageOrganization) return;
     setAdminError(null);
     try {
-      await postJson('/organization-members/remove', {
+      await submitAndAwaitV2Operation('/org/management', {
+        action: 'REMOVE_ORGANIZATION_MEMBER',
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
         target_user_id: Number(removeMemberForm.targetUserId),
@@ -329,7 +333,8 @@ function Organization() {
     if (!canLeaveOrganization) return;
     setAdminError(null);
     try {
-      await postJson('/organization-members/leave', {
+      await submitAndAwaitV2Operation('/org/management', {
+        action: 'LEAVE_ORGANIZATION',
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
       });
@@ -345,7 +350,8 @@ function Organization() {
     if (!canManageOrganization) return;
     setAdminError(null);
     try {
-      await postJson('/organizations/delete', {
+      await submitAndAwaitV2Operation('/org/management', {
+        action: 'DELETE_ORGANIZATION',
         user_id: Number(userId),
         organization_id: normalizedOrganizationId,
       });

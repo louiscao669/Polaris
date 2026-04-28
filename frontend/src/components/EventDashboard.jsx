@@ -2,7 +2,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useEffect, useState } from 'react';
 import './EventDashboard.css';
 import InlineActionPanel from './InlineActionPanel';
-import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
+import { readJson, submitAndAwaitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
 import { formatConstraintOption, formatRoleOption, readPolicyOptions } from '../lib/policyOptions';
@@ -284,15 +284,12 @@ export default function EventDashboard() {
     setMarketActionError(null);
 
     try {
-      const op = await submitV2Operation('/markets/lifecycle', {
+      await submitAndAwaitV2Operation('/markets/lifecycle', {
         action: 'CREATE_MARKET',
         user_id: Number(userId),
         event_id: Number(eventId),
         question,
         description,
-      });
-      await pollOperation(op.operation_id, {
-        headers: { 'X-Force-Leader': 'true' },
       });
       setCreateMarketForm({ question: '', description: '' });
       closeAdminPanel();
@@ -312,8 +309,10 @@ export default function EventDashboard() {
     if (!caption || !canManageEvent) return;
     setAdminError(null);
     try {
-      await putJson(`/events/${eventId}`, {
+      await submitAndAwaitV2Operation('/events/lifecycle', {
+        action: 'UPDATE_EVENT',
         user_id: Number(userId),
+        event_id: Number(eventId),
         caption,
       });
       closeAdminPanel();
@@ -329,7 +328,8 @@ export default function EventDashboard() {
     if (!roleId || !canManageEvent) return;
     setAdminError(null);
     try {
-      await postJson('/events/designate-open-to', {
+      await submitAndAwaitV2Operation('/events/lifecycle', {
+        action: 'DESIGNATE_EVENT_OPEN_TO',
         user_id: Number(userId),
         event_id: Number(eventId),
         role_id: roleId,
@@ -352,7 +352,8 @@ export default function EventDashboard() {
     if (!eventTokenId || !canManageEvent) return;
     setAdminError(null);
     try {
-      await postJson('/events/designate-token', {
+      await submitAndAwaitV2Operation('/events/lifecycle', {
+        action: 'DESIGNATE_EVENT_TOKEN',
         user_id: Number(userId),
         event_id: Number(eventId),
         token_id: Number(eventTokenId),
@@ -375,7 +376,8 @@ export default function EventDashboard() {
     if (!marketCreatorId || !canManageEvent) return;
     setAdminError(null);
     try {
-      await postJson('/events/designate-market-creator', {
+      await submitAndAwaitV2Operation('/events/lifecycle', {
+        action: 'DESIGNATE_EVENT_MARKET_CREATOR',
         user_id: Number(userId),
         event_id: Number(eventId),
         market_creator_id: Number(marketCreatorId),
@@ -394,7 +396,8 @@ export default function EventDashboard() {
     if (!constraintId || !value || !canManageEvent) return;
     setAdminError(null);
     try {
-      await postJson('/events/designate-constraint', {
+      await submitAndAwaitV2Operation('/events/lifecycle', {
+        action: 'DESIGNATE_EVENT_CONSTRAINT',
         user_id: Number(userId),
         event_id: Number(eventId),
         constraint_id: Number(constraintId),
@@ -413,7 +416,8 @@ export default function EventDashboard() {
     if (!canManageEvent) return;
     setAdminError(null);
     try {
-      await postJson('/events/delete', {
+      await submitAndAwaitV2Operation('/events/lifecycle', {
+        action: 'DELETE_EVENT',
         user_id: Number(userId),
         event_id: Number(eventId),
       });

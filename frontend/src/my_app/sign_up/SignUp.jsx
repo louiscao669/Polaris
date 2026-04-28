@@ -15,7 +15,7 @@ import Stack from '@mui/material/Stack';
 import MuiCard from '@mui/material/Card';
 import { styled, useColorScheme } from '@mui/material/styles';
 import AppTheme from '../shared-theme/AppTheme';
-import { pollOperation, submitV2Operation, formatApiError } from '../../lib/api';
+import { submitAndAwaitV2Operation, formatApiError } from '../../lib/api';
 // import ColorModeSelect from '../shared-theme/ColorModeSelect';
 import { GoogleIcon, FacebookIcon } from './components/CustomIcons';
 
@@ -154,11 +154,10 @@ function SignUpContent() {
       delete payload.age;
     }
     try {
-      const result = await submitV2Operation('/user/account', {
+      await submitAndAwaitV2Operation('/user/account', {
         action: 'USER_SIGNUP',
         ...payload,
       });
-      await pollOperation(result.operation_id);
       navigate('/signin', {
         state: {
           signupSuccess: 'Account created. Sign in to continue.',

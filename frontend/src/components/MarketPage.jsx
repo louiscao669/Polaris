@@ -2,7 +2,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import './MarketPage.css';
 import InlineActionPanel from './InlineActionPanel';
-import { pollOperation, postJson, putJson, readJson, submitV2Operation } from '../lib/api';
+import { readJson, submitAndAwaitV2Operation } from '../lib/api';
 import { getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
 import {
@@ -537,7 +537,7 @@ export default function MarketPage() {
     setTradeSubmitting(true);
     setTradeError(null);
     try {
-      const operation = await submitV2Operation('/markets/transactions', {
+      await submitAndAwaitV2Operation('/markets/transactions', {
         action: 'MARKET_TRANSACTION',
         user_id: numericUserId,
         market_id: numericMarketId,
@@ -546,9 +546,6 @@ export default function MarketPage() {
         qty: Number(tradeForm.qty),
         transaction_id: Date.now(),
         transaction_type: tradeForm.transactionType,
-      });
-      await pollOperation(operation.operation_id, {
-        headers: { 'X-Force-Leader': 'true' },
       });
       await refreshAfterTrade();
     } catch (error) {
@@ -564,8 +561,10 @@ export default function MarketPage() {
     if (!question || !canManageMarket) return;
     setAdminError(null);
     try {
-      await putJson(`/markets/${marketId}`, {
+      await submitAndAwaitV2Operation('/markets/lifecycle', {
+        action: 'UPDATE_MARKET',
         user_id: Number(userId),
+        market_id: Number(marketId),
         question,
       });
       closeAdminPanel();
@@ -586,7 +585,8 @@ export default function MarketPage() {
     if (!marketTokenId || !canManageMarket) return;
     setAdminError(null);
     try {
-      await postJson('/markets/designate-token', {
+      await submitAndAwaitV2Operation('/markets/lifecycle', {
+        action: 'DESIGNATE_MARKET_TOKEN',
         user_id: Number(userId),
         market_id: Number(marketId),
         token_id: Number(marketTokenId),
@@ -606,7 +606,8 @@ export default function MarketPage() {
     if (!asId) return;
     setAdminError(null);
     try {
-      await postJson('/markets/designate-open-to-as', {
+      await submitAndAwaitV2Operation('/markets/lifecycle', {
+        action: 'DESIGNATE_MARKET_OPEN_TO_AS',
         user_id: Number(userId),
         market_id: Number(marketId),
         role_id: roleId,
@@ -630,7 +631,8 @@ export default function MarketPage() {
     }
     setAdminError(null);
     try {
-      await postJson('/markets/designate-result', {
+      await submitAndAwaitV2Operation('/markets/lifecycle', {
+        action: 'DESIGNATE_MARKET_RESULT',
         user_id: Number(userId),
         market_id: Number(marketId),
         result: normalized === 'YES' || normalized === 'TRUE',
@@ -649,7 +651,8 @@ export default function MarketPage() {
     if (!constraintId || !value || !canManageMarket) return;
     setAdminError(null);
     try {
-      await postJson('/markets/designate-constraint', {
+      await submitAndAwaitV2Operation('/markets/lifecycle', {
+        action: 'DESIGNATE_MARKET_CONSTRAINT',
         user_id: Number(userId),
         market_id: Number(marketId),
         constraint_id: Number(constraintId),

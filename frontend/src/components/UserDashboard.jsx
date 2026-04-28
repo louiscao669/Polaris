@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import './UserDashboard.css';
-import { pollOperation, postJson, readJson, submitV2Operation } from '../lib/api';
+import { readJson, submitAndAwaitV2Operation } from '../lib/api';
 import { getStoredFirstName, getStoredUserId } from '../lib/auth';
 import { normalizeOrganizationMembershipList } from '../lib/organizations';
 import InlineActionPanel from './InlineActionPanel';
@@ -191,14 +191,11 @@ export default function UserDashboard() {
 
     setCreateOrgSubmitting(true);
     try {
-      const op = await submitV2Operation('/org/management', {
+      await submitAndAwaitV2Operation('/org/management', {
         action: 'CREATE_ORGANIZATION',
         user_id: Number(userId),
         name: createOrgForm.name.trim(),
         description: createOrgForm.description.trim(),
-      });
-      await pollOperation(op.operation_id, {
-        headers: { 'X-Force-Leader': 'true' },
       });
       setCreateOrgForm({ name: '', description: '' });
       setShowCreateOrgPanel(false);
@@ -222,7 +219,8 @@ export default function UserDashboard() {
     setJoinOrgSubmitting(true);
     setOrgsError(null);
     try {
-      await postJson('/organization-members/join', {
+      await submitAndAwaitV2Operation('/org/management', {
+        action: 'JOIN_ORGANIZATION',
         user_id: Number(userId),
         organization_id: organizationId,
         role_id: joinOrgForm.roleId,

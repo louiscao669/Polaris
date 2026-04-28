@@ -124,6 +124,18 @@ export async function submitV2Operation(path, body, options = {}) {
   return payload;
 }
 
+export async function submitAndAwaitV2Operation(path, body, options = {}) {
+  const {
+    pollOptions,
+    ...submitOptions
+  } = options;
+  const accepted = await submitV2Operation(path, body, submitOptions);
+  return pollOperation(accepted.operation_id, {
+    headers: { 'X-Force-Leader': 'true' },
+    ...(pollOptions || {}),
+  });
+}
+
 export async function pollOperation(operationId, options = {}) {
   const {
     intervalMs = 1200,
