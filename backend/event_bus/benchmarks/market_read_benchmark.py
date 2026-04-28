@@ -8,6 +8,7 @@ import csv
 import json
 import math
 import os
+import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -17,23 +18,19 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+HARDCODED_TOTAL_USER_SWEEP = [2, 4, 8, 10] + list(range(20, 101, 10))
+
 
 @dataclass
 class ReadResult:
     index: int
+    user_id: int
     market_id: int
     latency_ms: float
     status_code: int
     ok: bool
     endpoint: str
     error_message: str | None = None
-
-
-@dataclass
-class ScenarioSpec:
-    name: str
-    warm_cache: bool
-    cache_mode: str
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -95,20 +92,121 @@ def parse_positive_int_sweep(raw: str, *, label: str) -> list[int]:
         p = part.strip()
         if not p:
             continue
-        value = int(p)
-        if value <= 0:
+        v = int(p)
+        if v <= 0:
             raise ValueError(f"{label} sweep values must be > 0")
-        values.append(value)
+        values.append(v)
     return values
 
 
-def build_endpoint(args: argparse.Namespace, market_id: int) -> str:
+def parse_int_list(raw: str) -> list[int]:
+    out: list[int] = []
+    for part in raw.split(","):
+        p = part.strip()
+        if not p:
+            continue
+        out.append(int(p))
+    return out
+
+
+def get_user_market_for_index(index: int, args: argparse.Namespace) -> tuple[int, int]:
+    if not args.engineer_user_ids and not args.marketing_user_ids:
+        market_count = max(1, int(getattr(args, "market_count", 1)))
+        market_id = args.market_id + (index % market_count)
+        return args.user_id, market_id
+
+    engineers = args.engineer_user_ids
+    marketings = args.marketing_user_ids
+    total_users = len(engineers) + len(marketings)
+    if total_users <= 0:
+        raise ValueError("multi-user mode requires at least one user id")
+
+    slot = index % total_users
+    if slot < len(engineers):
+        user_id = engineers[slot]
+        market_id = args.engineer_market_start + (slot % args.engineer_market_count)
+        return user_id, market_id
+
+    m_idx = slot - len(engineers)
+    user_id = marketings[m_idx]
+    market_id = args.marketing_market_start + (m_idx % args.marketing_market_count)
+    return user_id, market_id
+
+
+def select_role_users(args: argparse.Namespace) -> tuple[list[int], list[int]]:
+    if not args.auto_pick_role_users:
+        return args.engineer_user_ids, args.marketing_user_ids
+
+    try:
+        import pymysql  # type: ignore
+    except ImportError as e:
+        raise RuntimeError(
+            "auto-pick requires pymysql. Install with: pip install pymysql"
+        ) from e
+
+    conn = pymysql.connect(
+        host=args.db_host,
+        port=args.db_port,
+        user=args.db_user,
+        password=args.db_password,
+        database=args.db_name,
+        ssl={"ca": args.db_ssl_ca} if args.db_ssl_ca else None,
+        cursorclass=pymysql.cursors.Cursor,
+        autocommit=True,
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT user_id
+                FROM user_org_role
+                WHERE org_id = %s AND role_id = %s
+                ORDER BY user_id
+                """,
+                (args.org_id, args.engineer_role_id),
+            )
+            engineer_pool = [int(row[0]) for row in cur.fetchall()]
+            cur.execute(
+                """
+                SELECT user_id
+                FROM user_org_role
+                WHERE org_id = %s AND role_id = %s
+                ORDER BY user_id
+                """,
+                (args.org_id, args.marketing_role_id),
+            )
+            marketing_pool = [int(row[0]) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+    if len(engineer_pool) < args.engineer_sample_size:
+        raise ValueError(
+            f"Not enough engineer users in org {args.org_id}: "
+            f"need {args.engineer_sample_size}, found {len(engineer_pool)}"
+        )
+    if len(marketing_pool) < args.marketing_sample_size:
+        raise ValueError(
+            f"Not enough marketing users in org {args.org_id}: "
+            f"need {args.marketing_sample_size}, found {len(marketing_pool)}"
+        )
+
+    rng = random.Random(args.role_pick_seed)
+    engineer_ids = rng.sample(engineer_pool, args.engineer_sample_size)
+    marketing_ids = rng.sample(marketing_pool, args.marketing_sample_size)
+    engineer_ids.sort()
+    marketing_ids.sort()
+    return engineer_ids, marketing_ids
+
+
+def build_endpoint(
+    args: argparse.Namespace, *, user_id: int, market_id: int, cache_mode: str
+) -> str:
     endpoint = args.endpoint_template.format(
         market_id=market_id,
         event_id=args.event_id,
         organization_id=args.organization_id,
     )
-    query: dict[str, Any] = {"user_id": args.user_id}
+    query: dict[str, Any] = {"user_id": user_id}
     if "{market_id}" not in args.endpoint_template:
         query["market_id"] = market_id
     if "{event_id}" not in args.endpoint_template and args.event_id is not None:
@@ -122,8 +220,8 @@ def build_endpoint(args: argparse.Namespace, market_id: int) -> str:
         query["hours"] = args.hours
     if args.span is not None:
         query["span"] = args.span
-    if args.cache_mode != "default":
-        query["cache_mode"] = args.cache_mode
+    if cache_mode != "default":
+        query["cache_mode"] = cache_mode
     return f"{args.base_url.rstrip('/')}{endpoint}?{urlencode(query)}"
 
 
@@ -132,14 +230,16 @@ def submit_read(
     args: argparse.Namespace,
     headers: dict[str, str],
 ) -> ReadResult:
-    market_count = max(1, int(getattr(args, "market_count", 1)))
-    market_id = args.market_id + (index % market_count)
-    url = build_endpoint(args, market_id)
+    user_id, market_id = get_user_market_for_index(index, args)
+    url = build_endpoint(args, user_id=user_id, market_id=market_id, cache_mode=args.cache_mode)
+    request_headers = dict(headers)
+    if args.per_request_x_user_id:
+        request_headers["X-User-Id"] = str(user_id)
     started = time.perf_counter()
     status, body = json_request(
         "GET",
         url,
-        headers=headers,
+        headers=request_headers,
         timeout=args.request_timeout,
     )
     elapsed_ms = (time.perf_counter() - started) * 1000.0
@@ -152,6 +252,7 @@ def submit_read(
             error_message = str(body)
     return ReadResult(
         index=index,
+        user_id=user_id,
         market_id=market_id,
         latency_ms=elapsed_ms,
         status_code=status,
@@ -163,7 +264,6 @@ def submit_read(
 
 def warm_cache(args: argparse.Namespace, headers: dict[str, str]) -> None:
     market_count = max(1, int(getattr(args, "market_count", 1)))
-    print(f"Warming cache with {market_count} market(s)...")
     for offset in range(market_count):
         result = submit_read(offset, args, headers)
         if not result.ok:
@@ -201,7 +301,7 @@ def print_summary(results: list[ReadResult], total_seconds: float) -> None:
         print("------------")
         for result in failed[:10]:
             print(
-                f"market_id={result.market_id} "
+                f"user_id={result.user_id} market_id={result.market_id} "
                 f"http={result.status_code} error={result.error_message or 'unknown'}"
             )
         if len(failed) > 10:
@@ -222,8 +322,8 @@ def parse_args() -> argparse.Namespace:
         description="Run throughput/latency tests for read-heavy endpoints."
     )
     parser.add_argument("--base-url", default="http://localhost:8000")
-    parser.add_argument("--user-id", type=int, required=True)
-    parser.add_argument("--market-id", type=int, required=True)
+    parser.add_argument("--user-id", type=int, default=None)
+    parser.add_argument("--market-id", type=int, default=None)
     parser.add_argument("--event-id", type=int, default=None)
     parser.add_argument("--organization-id", type=int, default=None)
     parser.add_argument("--requests", type=int, default=2000)
@@ -231,7 +331,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--market-count", type=int, default=1)
     parser.add_argument(
         "--endpoint-template",
-        default="/markets/stats/liquidity",
+        default="/markets/{market_id}",
         help=(
             "Path to benchmark. Supports {market_id}, {event_id}, and "
             "{organization_id} placeholders."
@@ -247,28 +347,46 @@ def parse_args() -> argparse.Namespace:
         default="default",
         help="Use 'bypass' to disable cache reads and cache writes for the request.",
     )
-    parser.add_argument(
-        "--scenario-sweep",
-        action="store_true",
-        help="Run cold-cache, warm-cache, and no-cache scenarios back-to-back.",
-    )
     parser.add_argument("--jwt", default=os.getenv("BENCHMARK_JWT"))
     parser.add_argument("--x-user-id", type=int, default=None)
     parser.add_argument(
-        "--concurrency-sweep",
-        default="",
-        help='Comma-separated values, e.g. "10,20,30,40,50".',
+        "--per-request-x-user-id",
+        action="store_true",
+        help="Set X-User-Id header from the request user_id for each request.",
     )
+    parser.add_argument("--engineer-user-ids", default="")
+    parser.add_argument("--marketing-user-ids", default="")
+    parser.add_argument("--auto-pick-role-users", action="store_true")
+    parser.add_argument("--org-id", type=int, default=3)
+    parser.add_argument("--engineer-role-id", default="engineer")
+    parser.add_argument("--marketing-role-id", default="marketing")
+    parser.add_argument("--engineer-sample-size", type=int, default=10)
+    parser.add_argument("--marketing-sample-size", type=int, default=10)
+    parser.add_argument("--role-pick-seed", type=int, default=42)
+    parser.add_argument("--db-host", default=os.getenv("DB_HOST", os.getenv("LEADER_DB_HOST", "")))
+    parser.add_argument("--db-port", type=int, default=int(os.getenv("DB_PORT", "3306")))
+    parser.add_argument("--db-user", default=os.getenv("DB_USER", ""))
+    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", ""))
+    parser.add_argument("--db-name", default=os.getenv("DB_NAME", ""))
+    parser.add_argument("--db-ssl-ca", default=os.getenv("DB_SSL_CA", ""))
+    parser.add_argument("--engineer-market-start", type=int, default=1)
+    parser.add_argument("--engineer-market-count", type=int, default=5)
+    parser.add_argument("--marketing-market-start", type=int, default=6)
+    parser.add_argument("--marketing-market-count", type=int, default=5)
+    parser.add_argument("--concurrency-sweep", default="")
+    parser.add_argument("--market-count-sweep", default="")
     parser.add_argument(
-        "--market-count-sweep",
-        default="",
-        help='Comma-separated values, e.g. "1,5,10,20".',
+        "--hardcoded-user-sweep",
+        action="store_true",
+        help="Run fixed total-user sweep: 2,4,8,10,20,30,...,100 (50/50 split).",
     )
     parser.add_argument("--out-csv", default="", help="Optional CSV output path for sweep.")
     return parser.parse_args()
 
 
-def run_once(args: argparse.Namespace, headers: dict[str, str], *, verbose: bool) -> tuple[int, int, float]:
+def run_once(
+    args: argparse.Namespace, headers: dict[str, str], *, verbose: bool
+) -> tuple[int, int, float]:
     if args.warm_cache:
         warm_cache(args, headers)
 
@@ -313,82 +431,64 @@ def run_once(args: argparse.Namespace, headers: dict[str, str], *, verbose: bool
     return succeeded, failed, total_seconds
 
 
-def run_scenarios(args: argparse.Namespace, headers: dict[str, str]) -> int:
-    scenarios = [
-        ScenarioSpec(name="cold-cache", warm_cache=False, cache_mode="default"),
-        ScenarioSpec(name="warm-cache", warm_cache=True, cache_mode="default"),
-        ScenarioSpec(name="no-cache", warm_cache=False, cache_mode="bypass"),
-    ]
-
-    print("Starting market read benchmark scenario sweep")
-    print(f"requests_per_run: {args.requests}")
-    print(f"market_count: {args.market_count}")
-    print()
-    print("scenario     succeeded  failed  throughput_rps  total_s")
-    print("-" * 61)
-
-    any_failed = False
-    csv_rows: list[dict[str, float | int | str]] = []
-    for scenario in scenarios:
-        run_args = argparse.Namespace(**vars(args))
-        run_args.warm_cache = scenario.warm_cache
-        run_args.cache_mode = scenario.cache_mode
-        succeeded, failed, total_seconds = run_once(run_args, headers, verbose=False)
-        throughput_rps = (args.requests / total_seconds) if total_seconds > 0 else 0.0
-        print(
-            f"{scenario.name:<12} {succeeded:>9}  {failed:>6}  "
-            f"{throughput_rps:>14.2f}  {total_seconds:>7.3f}"
-        )
-        csv_rows.append(
-            {
-                "scenario": scenario.name,
-                "succeeded": succeeded,
-                "failed": failed,
-                "throughput_rps": round(throughput_rps, 4),
-                "total_s": round(total_seconds, 4),
-                "endpoint_template": args.endpoint_template,
-                "market_count": args.market_count,
-                "cache_mode": scenario.cache_mode,
-                "warm_cache": str(scenario.warm_cache).lower(),
-            }
-        )
-        any_failed = any_failed or (failed > 0)
-
-    if args.out_csv.strip():
-        write_sweep_csv(args.out_csv, csv_rows)
-        print(f"\nWrote CSV: {args.out_csv}")
-    return 1 if any_failed else 0
-
-
 def main() -> int:
     args = parse_args()
+    args.engineer_user_ids = parse_int_list(args.engineer_user_ids)
+    args.marketing_user_ids = parse_int_list(args.marketing_user_ids)
+
+    if args.auto_pick_role_users and (not args.db_host or not args.db_user or not args.db_name):
+        raise ValueError(
+            "auto-pick mode requires db connection values (--db-host, --db-user, --db-name)."
+        )
+
+    if args.engineer_market_count <= 0 or args.marketing_market_count <= 0:
+        raise ValueError("engineer/marketing market counts must be > 0")
+
+    using_multi_user_mode = bool(
+        args.engineer_user_ids or args.marketing_user_ids or args.auto_pick_role_users
+    )
+    if (
+        using_multi_user_mode
+        and not args.auto_pick_role_users
+        and not (args.engineer_user_ids and args.marketing_user_ids)
+    ):
+        raise ValueError(
+            "Provide both --engineer-user-ids and --marketing-user-ids for multi-user mode."
+        )
+    if not using_multi_user_mode and (args.user_id is None or args.market_id is None):
+        raise ValueError(
+            "--user-id and --market-id are required unless multi-user mode is enabled."
+        )
+
     headers = build_headers(args)
-    concurrency_sweep = parse_positive_int_sweep(
-        args.concurrency_sweep,
-        label="concurrency",
-    )
-    market_count_sweep = parse_positive_int_sweep(
-        args.market_count_sweep,
-        label="market-count",
-    )
-    if concurrency_sweep and market_count_sweep:
-        raise ValueError(
-            "Use either --concurrency-sweep or --market-count-sweep, not both together."
-        )
-    if args.scenario_sweep and (concurrency_sweep or market_count_sweep):
-        raise ValueError(
-            "Use --scenario-sweep by itself, without concurrency or market-count sweeps."
-        )
+    concurrency_sweep = parse_positive_int_sweep(args.concurrency_sweep, label="concurrency")
+    market_count_sweep = parse_positive_int_sweep(args.market_count_sweep, label="market-count")
+    user_count_sweep = HARDCODED_TOTAL_USER_SWEEP if args.hardcoded_user_sweep else []
 
-    if args.scenario_sweep:
-        return run_scenarios(args, headers)
+    active_sweeps = sum(
+        1 for s in (concurrency_sweep, market_count_sweep, user_count_sweep) if s
+    )
+    if active_sweeps > 1:
+        raise ValueError(
+            "Use only one of --concurrency-sweep, --market-count-sweep, or --hardcoded-user-sweep."
+        )
+    if user_count_sweep and not args.auto_pick_role_users:
+        raise ValueError("--hardcoded-user-sweep requires --auto-pick-role-users.")
 
-    if not concurrency_sweep and not market_count_sweep:
+    if not concurrency_sweep and not market_count_sweep and not user_count_sweep:
+        if args.auto_pick_role_users:
+            args.engineer_user_ids, args.marketing_user_ids = select_role_users(args)
+            print(f"selected_engineer_user_ids: {args.engineer_user_ids}")
+            print(f"selected_marketing_user_ids: {args.marketing_user_ids}")
         _succeeded, failed, _total_seconds = run_once(args, headers, verbose=True)
         return 1 if failed else 0
 
-    sweep_values = concurrency_sweep or market_count_sweep
-    sweep_label = "users" if concurrency_sweep else "markets"
+    if user_count_sweep:
+        sweep_values = user_count_sweep
+        sweep_label = "users"
+    else:
+        sweep_values = concurrency_sweep or market_count_sweep
+        sweep_label = "users" if concurrency_sweep else "markets"
 
     print("Starting market read benchmark sweep")
     print(f"{sweep_label}_values: {sweep_values}")
@@ -398,9 +498,20 @@ def main() -> int:
     print("-" * 58)
     any_failed = False
     csv_rows: list[dict[str, float | int | str]] = []
-    for sweep_value in sweep_values:
+    for i, sweep_value in enumerate(sweep_values):
         run_args = argparse.Namespace(**vars(args))
-        if concurrency_sweep:
+        if user_count_sweep:
+            run_args.engineer_sample_size = sweep_value // 2
+            run_args.marketing_sample_size = sweep_value // 2
+            run_args.role_pick_seed = args.role_pick_seed + i
+            run_args.engineer_user_ids, run_args.marketing_user_ids = select_role_users(
+                run_args
+            )
+            print(
+                f"selected({sweep_value}) engineers={run_args.engineer_user_ids} "
+                f"marketing={run_args.marketing_user_ids}"
+            )
+        elif concurrency_sweep:
             run_args.concurrency = sweep_value
         else:
             run_args.market_count = sweep_value

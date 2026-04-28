@@ -7,6 +7,8 @@ import argparse
 import csv
 import json
 import math
+import os
+import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -15,10 +17,14 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+HARDCODED_TOTAL_USER_SWEEP = list(range(10, 101, 10))
+
 
 @dataclass
 class RequestResult:
     index: int
+    user_id: int
+    market_id: int
     transaction_id: int
     latency_ms: float
     status_code: int
@@ -46,11 +52,14 @@ def json_request(
     url: str,
     *,
     payload: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
     timeout: float = 30.0,
 ) -> tuple[int, dict[str, Any]]:
     raw = None if payload is None else json.dumps(payload).encode("utf-8")
     req = Request(url, data=raw, method=method)
     req.add_header("Content-Type", "application/json")
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
     try:
         with urlopen(req, timeout=timeout) as resp:
             body = resp.read().decode("utf-8")
@@ -66,27 +75,165 @@ def json_request(
         raise RuntimeError(f"request to {url} failed: {e}") from e
 
 
+def parse_positive_int_sweep(raw: str, *, label: str) -> list[int]:
+    if not raw.strip():
+        return []
+    values: list[int] = []
+    for part in raw.split(","):
+        p = part.strip()
+        if not p:
+            continue
+        v = int(p)
+        if v <= 0:
+            raise ValueError(f"{label} sweep values must be > 0")
+        values.append(v)
+    return values
+
+
+def parse_int_list(raw: str) -> list[int]:
+    out: list[int] = []
+    for part in raw.split(","):
+        p = part.strip()
+        if not p:
+            continue
+        out.append(int(p))
+    return out
+
+
+def select_role_users(args: argparse.Namespace) -> tuple[list[int], list[int]]:
+    if not args.auto_pick_role_users:
+        return args.engineer_user_ids, args.marketing_user_ids
+
+    try:
+        import pymysql  # type: ignore
+    except ImportError as e:
+        raise RuntimeError(
+            "auto-pick requires pymysql. Install with: pip install pymysql"
+        ) from e
+
+    conn = pymysql.connect(
+        host=args.db_host,
+        port=args.db_port,
+        user=args.db_user,
+        password=args.db_password,
+        database=args.db_name,
+        ssl={"ca": args.db_ssl_ca} if args.db_ssl_ca else None,
+        cursorclass=pymysql.cursors.Cursor,
+        autocommit=True,
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT user_id
+                FROM user_org_role
+                WHERE org_id = %s AND role_id = %s
+                ORDER BY user_id
+                """,
+                (args.org_id, args.engineer_role_id),
+            )
+            engineer_pool = [int(row[0]) for row in cur.fetchall()]
+            cur.execute(
+                """
+                SELECT user_id
+                FROM user_org_role
+                WHERE org_id = %s AND role_id = %s
+                ORDER BY user_id
+                """,
+                (args.org_id, args.marketing_role_id),
+            )
+            marketing_pool = [int(row[0]) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+    if len(engineer_pool) < args.engineer_sample_size:
+        raise ValueError(
+            f"Not enough engineer users in org {args.org_id}: "
+            f"need {args.engineer_sample_size}, found {len(engineer_pool)}"
+        )
+    if len(marketing_pool) < args.marketing_sample_size:
+        raise ValueError(
+            f"Not enough marketing users in org {args.org_id}: "
+            f"need {args.marketing_sample_size}, found {len(marketing_pool)}"
+        )
+
+    rng = random.Random(args.role_pick_seed)
+    engineer_ids = rng.sample(engineer_pool, args.engineer_sample_size)
+    marketing_ids = rng.sample(marketing_pool, args.marketing_sample_size)
+    engineer_ids.sort()
+    marketing_ids.sort()
+    return engineer_ids, marketing_ids
+
+
+def get_user_market_for_index(index: int, args: argparse.Namespace) -> tuple[int, int, bool]:
+    if not args.engineer_user_ids and not args.marketing_user_ids:
+        market_count = max(1, int(getattr(args, "market_count", 1)))
+        market_id = args.market_id + (index % market_count)
+        return args.user_id, market_id, True
+
+    engineers = args.engineer_user_ids
+    marketings = args.marketing_user_ids
+    total_users = len(engineers) + len(marketings)
+    if total_users <= 0:
+        raise ValueError("multi-user mode requires at least one user id")
+
+    slot = index % total_users
+    if slot < len(engineers):
+        user_id = engineers[slot]
+        market_id = args.engineer_market_start + (slot % args.engineer_market_count)
+        return user_id, market_id, True
+
+    m_idx = slot - len(engineers)
+    user_id = marketings[m_idx]
+    market_id = args.marketing_market_start + (m_idx % args.marketing_market_count)
+    return user_id, market_id, False
+
+
+def token_for_role(is_engineer: bool, args: argparse.Namespace) -> int:
+    if is_engineer and args.engineer_token_id is not None:
+        return args.engineer_token_id
+    if (not is_engineer) and args.marketing_token_id is not None:
+        return args.marketing_token_id
+    if args.token_id is None:
+        raise ValueError(
+            "Provide --token-id or both --engineer-token-id and --marketing-token-id."
+        )
+    return args.token_id
+
+
+def build_headers(args: argparse.Namespace) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if args.x_user_id is not None:
+        headers["X-User-Id"] = str(args.x_user_id)
+    return headers
+
+
 def submit_transaction(
     index: int,
     args: argparse.Namespace,
+    headers: dict[str, str],
     transaction_id: int,
 ) -> RequestResult:
-    market_count = max(1, int(getattr(args, "market_count", 1)))
-    market_id = args.market_id + (index % market_count)
+    user_id, market_id, is_engineer = get_user_market_for_index(index, args)
+    token_id = token_for_role(is_engineer, args)
     payload = {
-        "user_id": args.user_id,
+        "user_id": user_id,
         "market_id": market_id,
-        "token_id": args.token_id,
+        "token_id": token_id,
         "side": bool(args.side),
         "qty": int(args.qty),
         "transaction_id": transaction_id,
         "transaction_type": args.transaction_type,
     }
+    request_headers = dict(headers)
+    if args.per_request_x_user_id:
+        request_headers["X-User-Id"] = str(user_id)
     started = time.perf_counter()
     status, body = json_request(
         "POST",
         f"{args.base_url.rstrip('/')}/markets/transactions",
         payload=payload,
+        headers=request_headers,
         timeout=args.request_timeout,
     )
     elapsed_ms = (time.perf_counter() - started) * 1000.0
@@ -96,6 +243,8 @@ def submit_transaction(
         err = body.get("detail") if isinstance(body, dict) else str(body)
     return RequestResult(
         index=index,
+        user_id=user_id,
+        market_id=market_id,
         transaction_id=transaction_id,
         latency_ms=elapsed_ms,
         status_code=status,
@@ -144,15 +293,15 @@ def parse_args() -> argparse.Namespace:
         description="Run throughput/latency tests for single_server market transactions."
     )
     parser.add_argument("--base-url", default="http://localhost:8000")
-    parser.add_argument("--user-id", type=int, required=True)
-    parser.add_argument("--market-id", type=int, required=True)
+    parser.add_argument("--user-id", type=int, default=None)
+    parser.add_argument("--market-id", type=int, default=None)
     parser.add_argument(
         "--market-count",
         type=int,
         default=1,
         help="How many consecutive market ids to round-robin across, starting at --market-id.",
     )
-    parser.add_argument("--token-id", type=int, required=True)
+    parser.add_argument("--token-id", type=int, default=None)
     parser.add_argument("--requests", type=int, default=1000)
     parser.add_argument("--concurrency", type=int, default=10)
     parser.add_argument("--qty", type=int, default=1)
@@ -164,40 +313,46 @@ def parse_args() -> argparse.Namespace:
         default=int(time.time() * 1000),
     )
     parser.add_argument("--request-timeout", type=float, default=30.0)
+    parser.add_argument("--x-user-id", type=int, default=None)
+    parser.add_argument(
+        "--per-request-x-user-id",
+        action="store_true",
+        help="Set X-User-Id header from the request user_id for each request.",
+    )
+    parser.add_argument("--engineer-user-ids", default="")
+    parser.add_argument("--marketing-user-ids", default="")
+    parser.add_argument("--auto-pick-role-users", action="store_true")
+    parser.add_argument("--org-id", type=int, default=3)
+    parser.add_argument("--engineer-role-id", default="engineer")
+    parser.add_argument("--marketing-role-id", default="marketing")
+    parser.add_argument("--engineer-sample-size", type=int, default=10)
+    parser.add_argument("--marketing-sample-size", type=int, default=10)
+    parser.add_argument("--role-pick-seed", type=int, default=42)
+    parser.add_argument("--db-host", default=os.getenv("DB_HOST", os.getenv("LEADER_DB_HOST", "")))
+    parser.add_argument("--db-port", type=int, default=int(os.getenv("DB_PORT", "3306")))
+    parser.add_argument("--db-user", default=os.getenv("DB_USER", ""))
+    parser.add_argument("--db-password", default=os.getenv("DB_PASSWORD", ""))
+    parser.add_argument("--db-name", default=os.getenv("DB_NAME", ""))
+    parser.add_argument("--db-ssl-ca", default=os.getenv("DB_SSL_CA", ""))
+    parser.add_argument("--engineer-market-start", type=int, default=1)
+    parser.add_argument("--engineer-market-count", type=int, default=5)
+    parser.add_argument("--marketing-market-start", type=int, default=6)
+    parser.add_argument("--marketing-market-count", type=int, default=5)
+    parser.add_argument("--engineer-token-id", type=int, default=None)
+    parser.add_argument("--marketing-token-id", type=int, default=None)
     parser.add_argument(
         "--concurrency-sweep",
         default="",
         help='Comma-separated values, e.g. "10,20,30,40,50,60,70,80,90,100".',
     )
+    parser.add_argument("--market-count-sweep", default="")
+    parser.add_argument("--hardcoded-user-sweep", action="store_true")
     parser.add_argument("--out-csv", default="", help="Optional CSV output path for sweep.")
     return parser.parse_args()
 
 
-def parse_concurrency_sweep(raw: str) -> list[int]:
-    if not raw.strip():
-        return []
-    out: list[int] = []
-    for part in raw.split(","):
-        p = part.strip()
-        if not p:
-            continue
-        v = int(p)
-        if v <= 0:
-            raise ValueError("concurrency values must be > 0")
-        out.append(v)
-    return out
-
-
 def write_sweep_csv(path: str, rows: list[dict[str, float | int]]) -> None:
-    fieldnames = [
-        "users",
-        "succeeded",
-        "failed",
-        "submit_rps",
-        "completion_ops_s",
-        "submit_s",
-        "total_s",
-    ]
+    fieldnames = list(rows[0].keys()) if rows else []
     with open(path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -205,7 +360,7 @@ def write_sweep_csv(path: str, rows: list[dict[str, float | int]]) -> None:
             writer.writerow(row)
 
 
-def run_once(args: argparse.Namespace, *, verbose: bool) -> tuple[int, int, float]:
+def run_once(args: argparse.Namespace, headers: dict[str, str], *, verbose: bool) -> tuple[int, int, float]:
     if verbose:
         print("Starting single_server market benchmark")
         print(
@@ -230,7 +385,7 @@ def run_once(args: argparse.Namespace, *, verbose: bool) -> tuple[int, int, floa
     started = time.perf_counter()
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         futures = [
-            pool.submit(submit_transaction, idx, args, args.transaction_id_start + idx)
+            pool.submit(submit_transaction, idx, args, headers, args.transaction_id_start + idx)
             for idx in range(args.requests)
         ]
         for future in as_completed(futures):
@@ -246,35 +401,97 @@ def run_once(args: argparse.Namespace, *, verbose: bool) -> tuple[int, int, floa
 
 def main() -> int:
     args = parse_args()
-    sweep_values = parse_concurrency_sweep(args.concurrency_sweep)
-    if not sweep_values:
-        succeeded, failed, _total_seconds = run_once(args, verbose=True)
+    args.engineer_user_ids = parse_int_list(args.engineer_user_ids)
+    args.marketing_user_ids = parse_int_list(args.marketing_user_ids)
+
+    if args.auto_pick_role_users and (not args.db_host or not args.db_user or not args.db_name):
+        raise ValueError(
+            "auto-pick mode requires db connection values (--db-host, --db-user, --db-name)."
+        )
+    if args.engineer_market_count <= 0 or args.marketing_market_count <= 0:
+        raise ValueError("engineer/marketing market counts must be > 0")
+
+    using_multi_user_mode = bool(
+        args.engineer_user_ids or args.marketing_user_ids or args.auto_pick_role_users
+    )
+    if (
+        using_multi_user_mode
+        and not args.auto_pick_role_users
+        and not (args.engineer_user_ids and args.marketing_user_ids)
+    ):
+        raise ValueError(
+            "Provide both --engineer-user-ids and --marketing-user-ids for multi-user mode."
+        )
+    if not using_multi_user_mode and (args.user_id is None or args.market_id is None):
+        raise ValueError(
+            "--user-id and --market-id are required unless multi-user mode is enabled."
+        )
+    if not using_multi_user_mode and args.token_id is None:
+        raise ValueError("--token-id is required in single-user mode.")
+
+    headers = build_headers(args)
+    concurrency_sweep = parse_positive_int_sweep(args.concurrency_sweep, label="concurrency")
+    market_count_sweep = parse_positive_int_sweep(args.market_count_sweep, label="market-count")
+    user_count_sweep = HARDCODED_TOTAL_USER_SWEEP if args.hardcoded_user_sweep else []
+    active_sweeps = sum(1 for s in (concurrency_sweep, market_count_sweep, user_count_sweep) if s)
+    if active_sweeps > 1:
+        raise ValueError(
+            "Use only one of --concurrency-sweep, --market-count-sweep, or --hardcoded-user-sweep."
+        )
+    if user_count_sweep and not args.auto_pick_role_users:
+        raise ValueError("--hardcoded-user-sweep requires --auto-pick-role-users.")
+
+    if not concurrency_sweep and not market_count_sweep and not user_count_sweep:
+        if args.auto_pick_role_users:
+            args.engineer_user_ids, args.marketing_user_ids = select_role_users(args)
+            print(f"selected_engineer_user_ids: {args.engineer_user_ids}")
+            print(f"selected_marketing_user_ids: {args.marketing_user_ids}")
+        succeeded, failed, _total_seconds = run_once(args, headers, verbose=True)
         return 1 if failed else 0
 
+    if user_count_sweep:
+        sweep_values = user_count_sweep
+        sweep_label = "users"
+    else:
+        sweep_values = concurrency_sweep or market_count_sweep
+        sweep_label = "users" if concurrency_sweep else "markets"
+
     print("Starting single_server benchmark sweep")
-    print(f"concurrency_values: {sweep_values}")
+    print(f"{sweep_label}_values: {sweep_values}")
     print(f"requests_per_run: {args.requests}")
     print()
     print(
-        "users  succeeded  failed  submit_rps  completion_ops_s  "
+        f"{sweep_label:<7}  succeeded  failed  submit_rps  completion_ops_s  "
         "submit_s  total_s"
     )
     print("-" * 78)
     rows: list[dict[str, float | int]] = []
     any_failed = False
-    for i, users in enumerate(sweep_values):
+    for i, sweep_value in enumerate(sweep_values):
         run_args = argparse.Namespace(**vars(args))
-        run_args.concurrency = users
+        if user_count_sweep:
+            run_args.engineer_sample_size = sweep_value // 2
+            run_args.marketing_sample_size = sweep_value // 2
+            run_args.role_pick_seed = args.role_pick_seed + i
+            run_args.engineer_user_ids, run_args.marketing_user_ids = select_role_users(run_args)
+            print(
+                f"selected({sweep_value}) engineers={run_args.engineer_user_ids} "
+                f"marketing={run_args.marketing_user_ids}"
+            )
+        elif concurrency_sweep:
+            run_args.concurrency = sweep_value
+        else:
+            run_args.market_count = sweep_value
         run_args.transaction_id_start = args.transaction_id_start + (i * args.requests)
-        succeeded, failed, total_s = run_once(run_args, verbose=False)
+        succeeded, failed, total_s = run_once(run_args, headers, verbose=False)
         rps = (args.requests / total_s) if total_s > 0 else 0.0
         print(
-            f"{users:>5}  {succeeded:>9}  {failed:>6}  "
+            f"{sweep_value:>7}  {succeeded:>9}  {failed:>6}  "
             f"{rps:>10.2f}  {rps:>16.2f}  {total_s:>8.3f}  {total_s:>7.3f}"
         )
         rows.append(
             {
-                "users": users,
+                sweep_label: sweep_value,
                 "succeeded": succeeded,
                 "failed": failed,
                 "submit_rps": round(rps, 4),
