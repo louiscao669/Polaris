@@ -32,10 +32,10 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 # When set, all read API nodes can share the same market/metadata cache.
 # ElastiCache: use rediss:// for in-transit encryption (TLS).
-REDIS_CACHE_URL: str = os.getenv("master.polaris-redis.zflvat.use2.cache.amazonaws.com:6379", "").strip()
+REDIS_CACHE_URL: str = os.getenv("REDIS_CACHE_URL", "").strip()
 
 # If true and Redis is unavailable at first use, fall back to in-process cache.
-REDIS_CACHE_FALLBACK: bool = env_bool("replica.polaris-redis.zflvat.use2.cache.amazonaws.com:6379", True)
+REDIS_CACHE_FALLBACK: bool = env_bool("REDIS_CACHE_FALLBACK", True)
 
 # Key namespace to avoid collisions with other apps on a shared cluster.
 REDIS_CACHE_KEY_PREFIX: str = os.getenv(
