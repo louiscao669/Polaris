@@ -332,7 +332,7 @@ export default function EventDashboard() {
         caption,
       });
       closeAdminPanel();
-      await loadEvent();
+      await loadEvent(true);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to update event');
@@ -351,7 +351,7 @@ export default function EventDashboard() {
         role_id: roleId,
       });
       closeAdminPanel();
-      await loadEvent();
+      await loadEvent(true);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to add event visibility role');
@@ -375,7 +375,7 @@ export default function EventDashboard() {
         token_id: Number(eventTokenId),
       });
       closeAdminPanel();
-      await loadEvent();
+      await loadEvent(true);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to add event token');
@@ -399,7 +399,7 @@ export default function EventDashboard() {
         market_creator_id: Number(marketCreatorId),
       });
       closeAdminPanel();
-      await loadEvent();
+      await loadEvent(true);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to add market creator');
@@ -421,7 +421,7 @@ export default function EventDashboard() {
       });
       setEventRuleForm({ constraintId: '', value: '' });
       closeAdminPanel();
-      await loadEvent();
+      await loadEvent(true);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to add event rule');
