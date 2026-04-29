@@ -60,11 +60,27 @@ export default function EventDashboard() {
   const [policyOptions, setPolicyOptions] = useState({ constraints: [], market_access: [] });
   const numericUserId = Number(userId);
 
-  const loadEvent = async () => {
+  const buildEventPath = (bypassCache = false) => {
+    const query = new URLSearchParams({ user_id: String(userId) });
+    if (bypassCache) {
+      query.set('cache_mode', 'bypass');
+    }
+    return `/events/${eventId}?${query.toString()}`;
+  };
+
+  const buildEventMarketsPath = (bypassCache = false) => {
+    const query = new URLSearchParams({ user_id: String(userId) });
+    if (bypassCache) {
+      query.set('cache_mode', 'bypass');
+    }
+    return `/events/${eventId}/markets?${query.toString()}`;
+  };
+
+  const loadEvent = async (bypassCache = false) => {
     if (!eventId || !userId) return;
     setLoading(true);
     try {
-      const data = await readJson(`/events/${eventId}?user_id=${encodeURIComponent(userId)}`);
+      const data = await readJson(buildEventPath(bypassCache));
       setEventData(data);
     } catch (e) {
       console.error(e);
@@ -74,11 +90,11 @@ export default function EventDashboard() {
     }
   };
 
-  const loadMarkets = async () => {
+  const loadMarkets = async (bypassCache = false) => {
     if (!eventId || !userId) return;
     setMarketsLoading(true);
     try {
-      const rows = await readJson(`/events/${eventId}/markets?user_id=${encodeURIComponent(userId)}`);
+      const rows = await readJson(buildEventMarketsPath(bypassCache));
       setMarkets(Array.isArray(rows) ? rows : []);
     } catch (e) {
       console.error(e);
@@ -293,7 +309,7 @@ export default function EventDashboard() {
       });
       setCreateMarketForm({ question: '', description: '' });
       closeAdminPanel();
-      await loadMarkets();
+      await loadMarkets(true);
     } catch (e) {
       console.error(e);
       setMarketActionError(e.message || 'Failed to create market');
@@ -301,7 +317,7 @@ export default function EventDashboard() {
   };
 
   const refreshEventData = async () => {
-    await Promise.all([loadEvent(), loadMarkets()]);
+    await Promise.all([loadEvent(true), loadMarkets(true)]);
   };
 
   const handleRenameEvent = async () => {
