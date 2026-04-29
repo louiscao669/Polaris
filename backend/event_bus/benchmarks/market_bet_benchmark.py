@@ -18,7 +18,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-HARDCODED_TOTAL_USER_SWEEP = list(range(80, 101, 10))
+HARDCODED_TOTAL_USER_SWEEP = [2,4,8,20,40,60,80,100]
 
 
 @dataclass
@@ -37,6 +37,13 @@ class CompletedOperation:
     completion_latency_ms: float
     polls: int
     error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class StableAssignment:
+    user_id: int
+    market_id: int
+    token_id: int
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -103,6 +110,11 @@ def parse_int_list(raw: str) -> list[int]:
 
 
 def get_user_market_for_index(index: int, args: argparse.Namespace) -> tuple[int, int]:
+    stable_slots: list[StableAssignment] = getattr(args, "stable_slots", [])
+    if stable_slots:
+        s = stable_slots[index % len(stable_slots)]
+        return s.user_id, s.market_id
+
     if not args.engineer_user_ids and not args.marketing_user_ids:
         market_count = max(1, int(getattr(args, "market_count", 1)))
         market_id = args.market_id + (index % market_count)
@@ -138,6 +150,10 @@ def is_engineer_slot(index: int, args: argparse.Namespace) -> bool:
 
 
 def get_token_id_for_index(index: int, args: argparse.Namespace) -> int:
+    stable_slots: list[StableAssignment] = getattr(args, "stable_slots", [])
+    if stable_slots:
+        return stable_slots[index % len(stable_slots)].token_id
+
     using_multi_user_mode = bool(args.engineer_user_ids or args.marketing_user_ids)
     if not using_multi_user_mode:
         if args.token_id is None:
@@ -224,6 +240,117 @@ def select_role_users(args: argparse.Namespace) -> tuple[list[int], list[int]]:
     return engineer_ids, marketing_ids
 
 
+def _build_stable_assignments(args: argparse.Namespace) -> list[StableAssignment]:
+    """Pre-validate user/market/token triplets so benchmark issues valid BUY requests.
+
+    Checks:
+    - user has role access to the market (market_open_to_as + user_org_role)
+    - market allows the token (market_tokens_allowed)
+    - for BUY transactions: user has positive token stock (user_token_stock.qty > 0)
+    """
+    try:
+        import pymysql  # type: ignore
+    except ImportError as e:
+        raise RuntimeError("stable assignment mode requires pymysql. Install with: pip install pymysql") from e
+
+    assignments: list[StableAssignment] = []
+    market_access: set[tuple[int, int]] = set()
+    token_allowed: set[tuple[int, int]] = set()
+    stock_positive: set[tuple[int, int]] = set()
+
+    conn = pymysql.connect(
+        host=args.db_host,
+        port=args.db_port,
+        user=args.db_user,
+        password=args.db_password,
+        database=args.db_name,
+        ssl={"ca": args.db_ssl_ca} if args.db_ssl_ca else None,
+        cursorclass=pymysql.cursors.Cursor,
+        autocommit=True,
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT uor.user_id, mota.market_id
+                FROM user_org_role uor
+                JOIN market_open_to_as mota
+                  ON mota.org_id = uor.org_id AND mota.role_id = uor.role_id
+                WHERE uor.org_id = %s
+                """,
+                (args.org_id,),
+            )
+            market_access = {(int(r[0]), int(r[1])) for r in cur.fetchall()}
+
+            cur.execute(
+                """
+                SELECT market_id, token_id
+                FROM market_tokens_allowed
+                """
+            )
+            token_allowed = {(int(r[0]), int(r[1])) for r in cur.fetchall()}
+
+            if str(args.transaction_type).upper() == "BUY":
+                cur.execute(
+                    """
+                    SELECT user_id, token_id
+                    FROM user_token_stock
+                    WHERE qty > 0
+                    """
+                )
+                stock_positive = {(int(r[0]), int(r[1])) for r in cur.fetchall()}
+
+    finally:
+        conn.close()
+
+    def _markets(start: int, count: int) -> list[int]:
+        return [start + i for i in range(max(0, count))]
+
+    engineer_token = (
+        args.engineer_token_id if args.engineer_token_id is not None else args.token_id
+    )
+    marketing_token = (
+        args.marketing_token_id if args.marketing_token_id is not None else args.token_id
+    )
+
+    if engineer_token is None or marketing_token is None:
+        raise ValueError(
+            "Stable assignment mode requires engineer/marketing token ids "
+            "(or fallback --token-id)."
+        )
+
+    for uid in args.engineer_user_ids:
+        for mid in _markets(args.engineer_market_start, args.engineer_market_count):
+            if (uid, mid) not in market_access:
+                continue
+            if (mid, int(engineer_token)) not in token_allowed:
+                continue
+            if stock_positive and (uid, int(engineer_token)) not in stock_positive:
+                continue
+            assignments.append(
+                StableAssignment(user_id=int(uid), market_id=int(mid), token_id=int(engineer_token))
+            )
+
+    for uid in args.marketing_user_ids:
+        for mid in _markets(args.marketing_market_start, args.marketing_market_count):
+            if (uid, mid) not in market_access:
+                continue
+            if (mid, int(marketing_token)) not in token_allowed:
+                continue
+            if stock_positive and (uid, int(marketing_token)) not in stock_positive:
+                continue
+            assignments.append(
+                StableAssignment(user_id=int(uid), market_id=int(mid), token_id=int(marketing_token))
+            )
+
+    if not assignments:
+        raise ValueError(
+            "No stable user/market/token assignments found. "
+            "Check market_open_to_as, market_tokens_allowed, and user_token_stock."
+        )
+    return assignments
+
+
 def submit_transaction(
     index: int,
     args: argparse.Namespace,
@@ -278,7 +405,9 @@ def poll_operation(
     deadline = time.perf_counter() + args.poll_timeout
     polls = 0
     poll_headers = dict(headers)
-    poll_headers["X-Force-Leader"] = "false"
+    if args.poll_from_replica:
+        # Replica polling can be useful for consistency tests, but may lag.
+        poll_headers["X-Force-Leader"] = "false"
     while True:
         polls += 1
         status, body = json_request(
@@ -306,8 +435,18 @@ def poll_operation(
             )
 
         if time.perf_counter() >= deadline:
-            raise TimeoutError(
-                f"operation {accepted.operation_id} did not finish before timeout"
+            return CompletedOperation(
+                accepted=accepted,
+                final_status="failed",
+                completion_latency_ms=(
+                    time.perf_counter() - accepted.request_started_at
+                )
+                * 1000.0,
+                polls=polls,
+                error_message=(
+                    f"operation {accepted.operation_id} did not finish before "
+                    f"timeout ({args.poll_timeout}s)"
+                ),
             )
         time.sleep(args.poll_interval)
 
@@ -383,7 +522,7 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="How many consecutive market ids to round-robin across, starting at --market-id.",
     )
-    parser.add_argument("--qty", type=int, default=1.0)
+    parser.add_argument("--qty", type=int, default=1)
     parser.add_argument("--side", type=int, choices=(0, 1), default=1)
     parser.add_argument(
         "--transaction-type",
@@ -397,6 +536,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--poll-interval", type=float, default=0.5)
     parser.add_argument("--poll-timeout", type=float, default=30.0)
+    parser.add_argument(
+        "--poll-from-replica",
+        action="store_true",
+        help=(
+            "Poll operation status from read replicas (X-Force-Leader:false). "
+            "Default polls leader/writer for read-your-writes behavior."
+        ),
+    )
     parser.add_argument("--request-timeout", type=float, default=30.0)
     parser.add_argument("--jwt", default=os.getenv("BENCHMARK_JWT"))
     parser.add_argument("--x-user-id", type=int, default=None)
@@ -478,6 +625,22 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Run fixed total-user sweep: 2,4,8,10,20,30,...,100 "
             "(split evenly engineer/marketing)."
+        ),
+    )
+    parser.add_argument(
+        "--users-equals-concurrency",
+        action="store_true",
+        help=(
+            "When used with --hardcoded-user-sweep, set concurrency equal "
+            "to the swept total-user value for each run."
+        ),
+    )
+    parser.add_argument(
+        "--stable-auto-pick",
+        action="store_true",
+        help=(
+            "When using multi-user mode, precompute only valid user/market/token "
+            "triplets from DB and issue requests from that stable pool."
         ),
     )
     return parser.parse_args()
@@ -569,6 +732,7 @@ def main() -> int:
     args = parse_args()
     args.engineer_user_ids = parse_int_list(args.engineer_user_ids)
     args.marketing_user_ids = parse_int_list(args.marketing_user_ids)
+    args.stable_slots = []
     if args.auto_pick_role_users:
         if not args.db_host or not args.db_user or not args.db_name:
             raise ValueError(
@@ -624,10 +788,21 @@ def main() -> int:
             args.engineer_user_ids, args.marketing_user_ids = select_role_users(args)
             print(f"selected_engineer_user_ids: {args.engineer_user_ids}")
             print(f"selected_marketing_user_ids: {args.marketing_user_ids}")
+            if args.stable_auto_pick:
+                args.stable_slots = _build_stable_assignments(args)
+                print(f"stable_assignments: {len(args.stable_slots)}")
         succeeded, failed, _submit_seconds, _total_seconds = run_once(
             args, headers, verbose=True
         )
         return 1 if failed else 0
+
+    if (concurrency_sweep or market_count_sweep) and args.auto_pick_role_users:
+        args.engineer_user_ids, args.marketing_user_ids = select_role_users(args)
+        print(f"selected_engineer_user_ids: {args.engineer_user_ids}")
+        print(f"selected_marketing_user_ids: {args.marketing_user_ids}")
+        if args.stable_auto_pick:
+            args.stable_slots = _build_stable_assignments(args)
+            print(f"stable_assignments: {len(args.stable_slots)}")
 
     if user_count_sweep:
         sweep_values = user_count_sweep
@@ -658,14 +833,28 @@ def main() -> int:
             run_args.engineer_user_ids, run_args.marketing_user_ids = select_role_users(
                 run_args
             )
+            run_args.stable_slots = []
+            if args.stable_auto_pick:
+                run_args.stable_slots = _build_stable_assignments(run_args)
+            if args.users_equals_concurrency:
+                run_args.concurrency = sweep_value
             print(
                 f"selected({sweep_value}) engineers={run_args.engineer_user_ids} "
-                f"marketing={run_args.marketing_user_ids}"
+                f"marketing={run_args.marketing_user_ids} "
+                f"concurrency={run_args.concurrency} "
+                f"stable_assignments={len(getattr(run_args, 'stable_slots', []))}"
             )
         elif concurrency_sweep:
             run_args.concurrency = sweep_value
         else:
             run_args.market_count = sweep_value
+        print(
+            f"running_step={i + 1}/{len(sweep_values)} "
+            f"sweep_value={sweep_value} "
+            f"concurrency={run_args.concurrency} "
+            f"requests={run_args.requests}",
+            flush=True,
+        )
         # keep transaction_id unique across sweep runs
         run_args.transaction_id_start = args.transaction_id_start + (i * args.requests)
         succeeded, failed, submit_seconds, total_seconds = run_once(
