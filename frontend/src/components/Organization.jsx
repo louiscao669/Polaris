@@ -43,19 +43,36 @@ function Organization() {
   const [assignRoleForm, setAssignRoleForm] = useState({ targetUserId: '', roleId: '' });
   const [grantTokensForm, setGrantTokensForm] = useState({ targetUserId: '', tokenId: '', qty: '1' });
   const [removeMemberForm, setRemoveMemberForm] = useState({ targetUserId: '' });
+  const [copiedOrgId, setCopiedOrgId] = useState(false);
 
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId') || getStoredUserId();
-  const organizationQuery = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+  const buildOrganizationPath = (bypassCache = false) => {
+    if (!userId) return '';
+    const query = new URLSearchParams({ user_id: String(userId) });
+    if (bypassCache) {
+      query.set('cache_mode', 'bypass');
+    }
+    return `/organizations/${normalizedOrganizationId}?${query.toString()}`;
+  };
 
-  const loadOrganization = async () => {
+  const buildOrganizationEventsPath = (bypassCache = false) => {
+    if (!userId) return '';
+    const query = new URLSearchParams({ user_id: String(userId) });
+    if (bypassCache) {
+      query.set('cache_mode', 'bypass');
+    }
+    return `/organizations/${normalizedOrganizationId}/events?${query.toString()}`;
+  };
+
+  const loadOrganization = async (bypassCache = false) => {
     if (normalizedOrganizationId == null || !userId) {
       setOrgData(null);
       return;
     }
     setOrgLoading(true);
     try {
-      const data = await readJson(`/organizations/${normalizedOrganizationId}${organizationQuery}`);
+      const data = await readJson(buildOrganizationPath(bypassCache));
       setOrgData(data);
     } catch (e) {
       console.error(e);
@@ -108,14 +125,14 @@ function Organization() {
     loadOrganizationStats();
   }, [normalizedOrganizationId, userId, orgData, events]);
 
-  const loadOrganizationEvents = async () => {
+  const loadOrganizationEvents = async (bypassCache = false) => {
     if (normalizedOrganizationId == null || !userId) {
       setEvents([]);
       return;
     }
     setEventsLoading(true);
     try {
-      const data = await readJson(`/organizations/${normalizedOrganizationId}/events${organizationQuery}`);
+      const data = await readJson(buildOrganizationEventsPath(bypassCache));
       setEvents(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
@@ -156,7 +173,7 @@ function Organization() {
   };
 
   const refreshOrganization = async () => {
-    await Promise.all([loadOrganization(), loadOrganizationEvents()]);
+    await Promise.all([loadOrganization(true), loadOrganizationEvents(true)]);
   };
 
   const handleCreateNewEvent = async () => {
@@ -170,7 +187,7 @@ function Organization() {
         });
         setCreateEventForm({ name: '' });
         closeAdminPanel();
-        loadOrganizationEvents();
+        await loadOrganizationEvents(true);
       } else {
         setAdminError('Only the organization owner can create a new event.');
       }
@@ -192,7 +209,7 @@ function Organization() {
         description: editOrganizationForm.description.trim(),
       });
       closeAdminPanel();
-      await loadOrganization();
+      await loadOrganization(true);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to update organization');
@@ -212,7 +229,7 @@ function Organization() {
       });
       setCreateRoleForm({ name: '', description: '' });
       closeAdminPanel();
-      await loadOrganization();
+      await loadOrganization(true);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to create role');
@@ -232,7 +249,7 @@ function Organization() {
       });
       setCreateTokenForm({ name: '', description: '' });
       closeAdminPanel();
-      await loadOrganization();
+      await loadOrganization(true);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to create token');
@@ -260,7 +277,7 @@ function Organization() {
         role_id: assignRoleForm.roleId,
       });
       closeAdminPanel();
-      await loadOrganization();
+      await loadOrganization(true);
     } catch (error) {
       console.error(error);
       setAdminError(error.message || 'Failed to assign role');
@@ -363,6 +380,19 @@ function Organization() {
     }
   };
 
+  const handleCopyOrganizationId = async () => {
+    if (normalizedOrganizationId == null || typeof navigator === 'undefined' || !navigator.clipboard) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(String(normalizedOrganizationId));
+      setCopiedOrgId(true);
+      window.setTimeout(() => setCopiedOrgId(false), 1800);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   return (
     <section className="organization-page" aria-label="Organizer dashboard">
       <div className="organization-shell">
@@ -392,6 +422,24 @@ function Organization() {
             ? orgData.description
             : 'Manage events, monitor market activity, and keep your organization aligned with transparent forecasting.'}
           </p>
+          {normalizedOrganizationId != null && (
+            <div className="organization-share-id" role="note" aria-label="Organization join id">
+              <span className="organization-share-id__label">Share Organization ID</span>
+              <div className="organization-share-id__row">
+                <code className="organization-share-id__value">{normalizedOrganizationId}</code>
+                <button
+                  type="button"
+                  className="organization-share-id__button"
+                  onClick={handleCopyOrganizationId}
+                >
+                  {copiedOrgId ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <p className="organization-share-id__hint">
+                Members can use this ID when joining the organization.
+              </p>
+            </div>
+          )}
           {userId ? (
             <OrganizationMembership organizationId={normalizedOrganizationId} userId={userId} />
           ) : (
