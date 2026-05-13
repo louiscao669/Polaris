@@ -327,6 +327,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run fixed total-user sweep: 2,4,8,10,20,30,...,100 (50/50 split).",
     )
+    parser.add_argument(
+        "--users-equals-concurrency",
+        action="store_true",
+        help=(
+            "When used with --hardcoded-user-sweep, set concurrency equal "
+            "to the swept total-user value for each run."
+        ),
+    )
     parser.add_argument("--out-csv", default="")
     return parser.parse_args()
 
@@ -414,6 +422,11 @@ def main() -> int:
         succeeded, failed, _submit_seconds, _total_seconds = run_once(args, headers, verbose=True)
         return 1 if failed else 0
 
+    if (concurrency_sweep or market_count_sweep) and args.auto_pick_role_users:
+        args.engineer_user_ids, args.marketing_user_ids = select_role_users(args)
+        print(f"selected_engineer_user_ids: {args.engineer_user_ids}")
+        print(f"selected_marketing_user_ids: {args.marketing_user_ids}")
+
     if user_count_sweep:
         sweep_values = user_count_sweep
         sweep_label = "users"
@@ -439,9 +452,12 @@ def main() -> int:
             run_args.marketing_sample_size = sweep_value // 2
             run_args.role_pick_seed = args.role_pick_seed + i
             run_args.engineer_user_ids, run_args.marketing_user_ids = select_role_users(run_args)
+            if args.users_equals_concurrency:
+                run_args.concurrency = sweep_value
             print(
                 f"selected({sweep_value}) engineers={run_args.engineer_user_ids} "
-                f"marketing={run_args.marketing_user_ids}"
+                f"marketing={run_args.marketing_user_ids} "
+                f"concurrency={run_args.concurrency}"
             )
         elif concurrency_sweep:
             run_args.concurrency = sweep_value

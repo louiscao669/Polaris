@@ -9,6 +9,7 @@ import json
 import math
 import os
 import random
+import socket
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-HARDCODED_TOTAL_USER_SWEEP = [2, 4, 8, 10] + list(range(20, 101, 10))
+HARDCODED_TOTAL_USER_SWEEP = [2,4,8,20,40,60,80,100]
 
 
 @dataclass
@@ -73,6 +74,55 @@ def json_request(
         return e.code, parsed
     except URLError as e:
         raise RuntimeError(f"request to {url} failed: {e}") from e
+
+
+def _is_transient_transport_error(exc: Exception) -> bool:
+    """Best-effort filter for retryable network transport glitches."""
+    msg = str(exc).lower()
+    transient_markers = (
+        "connection reset by peer",
+        "the handshake operation timed out",
+        "timed out",
+        "ssl",
+        "eof occurred in violation of protocol",
+        "temporarily unavailable",
+    )
+    if any(marker in msg for marker in transient_markers):
+        return True
+    root = exc
+    seen: set[int] = set()
+    while root is not None and id(root) not in seen:
+        seen.add(id(root))
+        if isinstance(root, (TimeoutError, socket.timeout, ConnectionResetError)):
+            return True
+        root = getattr(root, "__cause__", None) or getattr(root, "__context__", None)
+    return False
+
+
+def json_request_with_retry(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    timeout: float = 30.0,
+    max_attempts: int = 3,
+    retry_backoff_seconds: float = 0.2,
+) -> tuple[int, dict[str, Any] | list[Any]]:
+    attempts = max(1, int(max_attempts))
+    for attempt in range(1, attempts + 1):
+        try:
+            return json_request(
+                method,
+                url,
+                headers=headers,
+                timeout=timeout,
+            )
+        except RuntimeError as e:
+            if attempt >= attempts or not _is_transient_transport_error(e):
+                raise
+            sleep_s = retry_backoff_seconds * (2 ** (attempt - 1))
+            time.sleep(max(0.0, sleep_s))
+    raise RuntimeError(f"request to {url} failed after {attempts} attempts")
 
 
 def build_headers(args: argparse.Namespace) -> dict[str, str]:
@@ -179,20 +229,30 @@ def select_role_users(args: argparse.Namespace) -> tuple[list[int], list[int]]:
     finally:
         conn.close()
 
-    if len(engineer_pool) < args.engineer_sample_size:
+    requested_engineers = int(args.engineer_sample_size)
+    requested_marketings = int(args.marketing_sample_size)
+    engineer_take = min(requested_engineers, len(engineer_pool))
+    marketing_take = min(requested_marketings, len(marketing_pool))
+
+    if requested_engineers > 0 and engineer_take == 0:
         raise ValueError(
-            f"Not enough engineer users in org {args.org_id}: "
-            f"need {args.engineer_sample_size}, found {len(engineer_pool)}"
+            f"No engineer users found in org {args.org_id} for role {args.engineer_role_id!r}."
         )
-    if len(marketing_pool) < args.marketing_sample_size:
+    if requested_marketings > 0 and marketing_take == 0:
         raise ValueError(
-            f"Not enough marketing users in org {args.org_id}: "
-            f"need {args.marketing_sample_size}, found {len(marketing_pool)}"
+            f"No marketing users found in org {args.org_id} for role {args.marketing_role_id!r}."
+        )
+
+    if engineer_take < requested_engineers or marketing_take < requested_marketings:
+        print(
+            "auto-pick sample capped by available users: "
+            f"engineers requested={requested_engineers} available={len(engineer_pool)} using={engineer_take}; "
+            f"marketing requested={requested_marketings} available={len(marketing_pool)} using={marketing_take}"
         )
 
     rng = random.Random(args.role_pick_seed)
-    engineer_ids = rng.sample(engineer_pool, args.engineer_sample_size)
-    marketing_ids = rng.sample(marketing_pool, args.marketing_sample_size)
+    engineer_ids = rng.sample(engineer_pool, engineer_take)
+    marketing_ids = rng.sample(marketing_pool, marketing_take)
     engineer_ids.sort()
     marketing_ids.sort()
     return engineer_ids, marketing_ids
@@ -236,11 +296,13 @@ def submit_read(
     if args.per_request_x_user_id:
         request_headers["X-User-Id"] = str(user_id)
     started = time.perf_counter()
-    status, body = json_request(
+    status, body = json_request_with_retry(
         "GET",
         url,
         headers=request_headers,
         timeout=args.request_timeout,
+        max_attempts=args.retry_attempts,
+        retry_backoff_seconds=args.retry_backoff_seconds,
     )
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     ok = 200 <= status < 300
@@ -340,6 +402,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hours", type=int, default=None)
     parser.add_argument("--span", type=int, default=None)
     parser.add_argument("--request-timeout", type=float, default=30.0)
+    parser.add_argument(
+        "--retry-attempts",
+        type=int,
+        default=3,
+        help="Max attempts for transient transport errors (default: 3).",
+    )
+    parser.add_argument(
+        "--retry-backoff-seconds",
+        type=float,
+        default=0.2,
+        help="Initial backoff between retries; doubles per attempt (default: 0.2).",
+    )
     parser.add_argument("--warm-cache", action="store_true")
     parser.add_argument(
         "--cache-mode",
@@ -483,12 +557,33 @@ def main() -> int:
         _succeeded, failed, _total_seconds = run_once(args, headers, verbose=True)
         return 1 if failed else 0
 
+    if (concurrency_sweep or market_count_sweep) and args.auto_pick_role_users:
+        args.engineer_user_ids, args.marketing_user_ids = select_role_users(args)
+        print(f"selected_engineer_user_ids: {args.engineer_user_ids}")
+        print(f"selected_marketing_user_ids: {args.marketing_user_ids}")
+
     if user_count_sweep:
         sweep_values = user_count_sweep
         sweep_label = "users"
     else:
         sweep_values = concurrency_sweep or market_count_sweep
         sweep_label = "users" if concurrency_sweep else "markets"
+
+    fixed_engineer_pool: list[int] = []
+    fixed_marketing_pool: list[int] = []
+    if user_count_sweep and args.auto_pick_role_users:
+        base_args = argparse.Namespace(**vars(args))
+        # Build one fixed sampled pool sized for the largest requested sweep point.
+        # Each run then uses a deterministic prefix so user sets are comparable.
+        max_total_users = max(user_count_sweep)
+        base_args.engineer_sample_size = max_total_users // 2
+        base_args.marketing_sample_size = max_total_users // 2
+        fixed_engineer_pool, fixed_marketing_pool = select_role_users(base_args)
+        print(
+            "fixed_user_pool: "
+            f"engineers={len(fixed_engineer_pool)} "
+            f"marketing={len(fixed_marketing_pool)}"
+        )
 
     print("Starting market read benchmark sweep")
     print(f"{sweep_label}_values: {sweep_values}")
@@ -501,12 +596,17 @@ def main() -> int:
     for i, sweep_value in enumerate(sweep_values):
         run_args = argparse.Namespace(**vars(args))
         if user_count_sweep:
-            run_args.engineer_sample_size = sweep_value // 2
-            run_args.marketing_sample_size = sweep_value // 2
-            run_args.role_pick_seed = args.role_pick_seed + i
-            run_args.engineer_user_ids, run_args.marketing_user_ids = select_role_users(
-                run_args
-            )
+            desired_engineers = sweep_value // 2
+            desired_marketings = sweep_value // 2
+            if fixed_engineer_pool or fixed_marketing_pool:
+                run_args.engineer_user_ids = fixed_engineer_pool[:desired_engineers]
+                run_args.marketing_user_ids = fixed_marketing_pool[:desired_marketings]
+            else:
+                run_args.engineer_sample_size = desired_engineers
+                run_args.marketing_sample_size = desired_marketings
+                run_args.engineer_user_ids, run_args.marketing_user_ids = select_role_users(
+                    run_args
+                )
             print(
                 f"selected({sweep_value}) engineers={run_args.engineer_user_ids} "
                 f"marketing={run_args.marketing_user_ids}"

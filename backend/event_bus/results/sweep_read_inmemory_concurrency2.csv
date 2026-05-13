@@ -1,0 +1,8 @@
+users,succeeded,failed,throughput_rps,total_s,endpoint_template,cache_mode,warm_cache
+2,500,500,20.4387,48.9269,/markets/{market_id},default,false
+4,500,500,43.0697,23.2182,/markets/{market_id},default,false
+8,500,500,91.6133,10.9154,/markets/{market_id},default,false
+16,500,500,178.8304,5.5919,/markets/{market_id},default,false
+32,500,500,47.5805,21.017,/markets/{market_id},default,false
+64,500,500,290.53,3.442,/markets/{market_id},default,false
+100,500,500,395.1424,2.5307,/markets/{market_id},default,false

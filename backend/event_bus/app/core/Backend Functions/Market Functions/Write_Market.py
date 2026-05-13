@@ -749,6 +749,21 @@ def do_m_transaction(data: dict[str, Any]):
 def _do_m_transaction(cursor, db, user_id, market_id, token_id, side, qty, transaction_id, transaction_type): 
 
     try:
+        try:
+            user_id = int(user_id)
+            market_id = int(market_id)
+            token_id = int(token_id)
+            transaction_id = int(transaction_id)
+            side = int(side)
+            qty_num = float(qty)
+        except (TypeError, ValueError):
+            return _fail("validation", "Transaction payload has invalid numeric fields.")
+
+        # Trading qty in this engine is discrete units; accept 1.0 but reject 1.5.
+        if not qty_num.is_integer():
+            return _fail("validation", "Trade quantity must be a whole number.")
+        qty = int(qty_num)
+
         if qty <= 0:
             return _fail("validation", "Trade quantity must be greater than zero.")
 

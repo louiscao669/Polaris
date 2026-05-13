@@ -84,6 +84,10 @@ class RedisTTLCache:
     def get(self, key: str) -> Any | None:
         if not cache_enabled_for_request():
             return None
+        # L1 (in-process) hot cache first to avoid a Redis RTT on repeated hits
+        mem_value = self._mem.get(key)
+        if mem_value is not None:
+            return mem_value
         r = _get_client()
         if r is None:
             return self._mem.get(key)
@@ -91,7 +95,10 @@ class RedisTTLCache:
             raw = r.get(self._full(key))
             if raw is None:
                 return None
-            return _json_loads(raw)
+            value = _json_loads(raw)
+            # Keep a short local copy to reduce cross-network cache lookups.
+            self._mem.set(key, value, 1.0)
+            return value
         except RedisError:
             return self._mem.get(key)
 
@@ -140,6 +147,10 @@ class RedisExplicitCache:
     def get(self, key: str) -> Any | None:
         if not cache_enabled_for_request():
             return None
+        # L1 (in-process) hot cache first for frequent repeated metadata reads
+        mem_value = self._mem.get(key)
+        if mem_value is not None:
+            return mem_value
         r = _get_client()
         if r is None:
             return self._mem.get(key)
@@ -147,7 +158,9 @@ class RedisExplicitCache:
             raw = r.get(self._full(key))
             if raw is None:
                 return None
-            return _json_loads(raw)
+            value = _json_loads(raw)
+            self._mem.set(key, value)
+            return value
         except RedisError:
             return self._mem.get(key)
 
