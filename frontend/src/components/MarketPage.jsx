@@ -390,7 +390,7 @@ export default function MarketPage() {
       try {
         const q = `user_id=${encodeURIComponent(String(numericUserId))}&market_id=${encodeURIComponent(
           String(numericMarketId)
-        )}`;
+        )}&cache_mode=bypass`;
         const [liquidity, timeFocus, whales, tradeDistribution, windowComparison, points] =
           await Promise.all([
             readJson(`/markets/stats/liquidity?${q}`),
@@ -444,7 +444,7 @@ export default function MarketPage() {
       try {
         const q = `user_id=${encodeURIComponent(String(numericUserId))}&market_id=${encodeURIComponent(
           String(numericMarketId)
-        )}`;
+        )}&cache_mode=bypass`;
         const selectedWindow = FORECAST_WINDOWS.find((option) => option.value === forecastWindow) || FORECAST_WINDOWS[0];
         const pointsParams =
           selectedWindow.value === 'auto'
@@ -485,7 +485,7 @@ export default function MarketPage() {
     if (!Number.isFinite(numericUserId) || !Number.isFinite(numericMarketId)) return;
     const q = `user_id=${encodeURIComponent(String(numericUserId))}&market_id=${encodeURIComponent(
       String(numericMarketId)
-    )}`;
+    )}&cache_mode=bypass`;
     const selectedWindow = FORECAST_WINDOWS.find((option) => option.value === forecastWindow) || FORECAST_WINDOWS[0];
     const pointsParams =
       selectedWindow.value === 'auto'

@@ -5,6 +5,7 @@ from market_logic_helpers import _market_side_pools, _current_side_price, _avera
 from fail import _fail, _log_result
 try:
     from app.read_cache import (
+        cache_enabled_for_request,
         event_markets_key,
         market_detail_key,
         market_read_cache,
@@ -13,6 +14,7 @@ try:
     )
 except ImportError:
     from backend.event_bus.app.read_cache import (
+        cache_enabled_for_request,
         event_markets_key,
         market_detail_key,
         market_read_cache,
@@ -23,6 +25,15 @@ try:
     from app.database import get_connection_reader, get_connection_writer
 except ImportError:
     from backend.event_bus.app.database import get_connection_reader, get_connection_writer
+
+
+def _market_stats_db():
+    """Use primary when client sends ``cache_mode=bypass`` (read-your-writes after trades)."""
+    return (
+        get_connection_writer()
+        if not cache_enabled_for_request()
+        else get_connection_reader()
+    )
 
 
 def _cache_success(key: str, value: Any, ttl_seconds: float) -> Any:
@@ -95,7 +106,7 @@ def stats_m_liquidity(data: dict[str, Any]):
         _log_result("stats_m_liquidity", cached)
         return cached
 
-    with get_connection_reader() as db:
+    with _market_stats_db() as db:
         cursor = db.cursor()
         result = _stats_m_liquidity(cursor, db, user_id, market_id)
     result = _cache_success(cache_key, result, 3.0)
@@ -461,7 +472,7 @@ def points_m(data: dict[str, Any]):
             _log_result("points_m", result)
             return result
 
-    with get_connection_reader() as db:
+    with _market_stats_db() as db:
         cursor = db.cursor()
         result = _points_m(cursor, db, user_id, market_id, span, hours)
     _log_result("points_m", result)
