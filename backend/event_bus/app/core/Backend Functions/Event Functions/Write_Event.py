@@ -73,6 +73,20 @@ def create_e(data: dict[str, Any]):
     return result
 
 
+def _ensure_org_leader_in_event_market_creators(
+    cursor, db, event_id: int, user_id: int
+) -> None:
+    """Leaders can already create markets via organization_leader; this row makes intent explicit."""
+    cursor.execute(
+        """
+        INSERT IGNORE INTO event_market_creators (event_id, user_id)
+        VALUES (%s, %s)
+        """,
+        (int(event_id), int(user_id)),
+    )
+    db.commit()
+
+
 def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=None): 
     try:
         # Check if user is the orgnization leader
@@ -101,6 +115,7 @@ def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=N
             )
             db.commit()
             _invalidate_event_reads(cursor, eid, organization_id)
+            _ensure_org_leader_in_event_market_creators(cursor, db, eid, user_id)
             return eid
 
         # Check if event with the same caption already exists in the organization
@@ -114,6 +129,9 @@ def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=N
         )
         current_event = cursor.fetchone()
         if current_event is not None:
+            _ensure_org_leader_in_event_market_creators(
+                cursor, db, int(current_event[0]), user_id
+            )
             return current_event[0]
 
         # Create event and insert it into the database, returning the event ID
@@ -126,8 +144,10 @@ def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=N
         )
         db.commit()
         _invalidate_event_reads(cursor, cursor.lastrowid, organization_id)
+        new_eid = int(cursor.lastrowid)
+        _ensure_org_leader_in_event_market_creators(cursor, db, new_eid, user_id)
 
-        return cursor.lastrowid
+        return new_eid
 
     except pymysql.err.IntegrityError as e:
         # prevent sql transaction from partially executing and leaving the database in an inconsistent state
@@ -144,6 +164,9 @@ def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=N
             )
             current_event = cursor.fetchone()
             if current_event is not None:
+                _ensure_org_leader_in_event_market_creators(
+                    cursor, db, int(current_event[0]), user_id
+                )
                 return current_event[0]
 
         return _fail("validation", "Unable to create event.")
@@ -154,6 +177,7 @@ def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=N
         print(f"Transaction failed, rolled back: {e}")
 
         return _fail("validation", f"Unable to create event: {e}")
+
 
 def designate_e_token(data: dict[str, Any]): 
     user_id = data.get("user_id")

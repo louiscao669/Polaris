@@ -13,7 +13,7 @@ from pymysql.cursors import DictCursor
 from .command_bus import enqueue_command_response
 from .read_cache import cache_mode
 from .database import get_connection_reader, get_connection_writer
-from .topics import EVENT_LIFECYCLE, MARKET_OPERATIONS, ORG_MANAGEMENT, USER_ACCOUNT
+from .topics import EVENT_LIFECYCLE, ORG_MANAGEMENT, USER_ACCOUNT
 
 _BF_ROOT = Path(__file__).resolve().parent / "core" / "Backend Functions"
 for _dir in (
@@ -608,8 +608,8 @@ def http_read_event_markets(
 @router.post("/markets")
 async def http_create_market(payload: dict[str, Any] = Body(...)):
     return await enqueue_command_response(
-        topic=MARKET_OPERATIONS,
-        domain="market.operations",
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
         payload={**payload, "action": "CREATE_MARKET"},
     )
 
@@ -617,8 +617,8 @@ async def http_create_market(payload: dict[str, Any] = Body(...)):
 @router.post("/markets/designate-token")
 async def http_designate_market_token(payload: dict[str, Any] = Body(...)):
     return await enqueue_command_response(
-        topic=MARKET_OPERATIONS,
-        domain="market.operations",
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
         payload={**payload, "action": "DESIGNATE_MARKET_TOKEN"},
     )
 
@@ -626,8 +626,8 @@ async def http_designate_market_token(payload: dict[str, Any] = Body(...)):
 @router.post("/markets/designate-result")
 async def http_designate_market_result(payload: dict[str, Any] = Body(...)):
     return await enqueue_command_response(
-        topic=MARKET_OPERATIONS,
-        domain="market.operations",
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
         payload={**payload, "action": "DESIGNATE_MARKET_RESULT"},
     )
 
@@ -635,8 +635,8 @@ async def http_designate_market_result(payload: dict[str, Any] = Body(...)):
 @router.post("/markets/designate-constraint")
 async def http_designate_market_constraint(payload: dict[str, Any] = Body(...)):
     return await enqueue_command_response(
-        topic=MARKET_OPERATIONS,
-        domain="market.operations",
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
         payload={**payload, "action": "DESIGNATE_MARKET_CONSTRAINT"},
     )
 
@@ -644,8 +644,8 @@ async def http_designate_market_constraint(payload: dict[str, Any] = Body(...)):
 @router.post("/markets/designate-open-to-as")
 async def http_designate_market_open_to_as(payload: dict[str, Any] = Body(...)):
     return await enqueue_command_response(
-        topic=MARKET_OPERATIONS,
-        domain="market.operations",
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
         payload={**payload, "action": "DESIGNATE_MARKET_OPEN_TO_AS"},
     )
 
@@ -653,8 +653,8 @@ async def http_designate_market_open_to_as(payload: dict[str, Any] = Body(...)):
 @router.post("/markets/transactions")
 async def http_market_transaction(payload: dict[str, Any] = Body(...)):
     return await enqueue_command_response(
-        topic=MARKET_OPERATIONS,
-        domain="market.operations",
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
         payload={**payload, "action": "MARKET_TRANSACTION"},
     )
 
@@ -662,8 +662,8 @@ async def http_market_transaction(payload: dict[str, Any] = Body(...)):
 @router.post("/markets/payout")
 async def http_market_payout(payload: dict[str, Any] = Body(...)):
     return await enqueue_command_response(
-        topic=MARKET_OPERATIONS,
-        domain="market.operations",
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
         payload={**payload, "action": "MARKET_PAYOUT"},
     )
 
@@ -674,8 +674,8 @@ async def http_update_market(
     payload: dict[str, Any] = Body(...),
 ):
     return await enqueue_command_response(
-        topic=MARKET_OPERATIONS,
-        domain="market.operations",
+        topic=EVENT_LIFECYCLE,
+        domain="event.lifecycle",
         payload={**payload, "market_id": market_id, "action": "UPDATE_MARKET"},
     )
 

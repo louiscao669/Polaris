@@ -1,6 +1,6 @@
 """Canonical Kafka topic names for Polaris v2 (MSK + IAM)."""
 from typing import Optional
-MARKET_OPERATIONS = "market.operations"
+MARKET_OPERATIONS = "market.operations"  # Legacy/backlog; v2 HTTP publishes market commands on EVENT_LIFECYCLE.
 MARKET_OPERATIONS_DLQ = "market.operations.dlq"
 
 EVENT_LIFECYCLE = "event.lifecycle"

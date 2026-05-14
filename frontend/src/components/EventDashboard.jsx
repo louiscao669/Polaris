@@ -300,13 +300,22 @@ export default function EventDashboard() {
     setMarketActionError(null);
 
     try {
-      await submitAndAwaitV2Operation('/markets/lifecycle', {
-        action: 'CREATE_MARKET',
-        user_id: Number(userId),
-        event_id: Number(eventId),
-        question,
-        description,
-      });
+      await submitAndAwaitV2Operation(
+        '/markets/lifecycle',
+        {
+          action: 'CREATE_MARKET',
+          user_id: Number(userId),
+          event_id: Number(eventId),
+          question,
+          description,
+        },
+        {
+          pollOptions: {
+            timeoutMs: 120000,
+            intervalMs: 1500,
+          },
+        },
+      );
       setCreateMarketForm({ question: '', description: '' });
       closeAdminPanel();
       await loadMarkets(true);

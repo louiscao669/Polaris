@@ -17,7 +17,7 @@ from .core.kafka_dispatch import dispatch_v2_consolidated
 from .kafka_aiokafka_common import aiokafka_common_kwargs
 from .operations_repo import update_operation_status
 from .processed_events_repo import classify_message, mark_applied, mark_failed
-from .topics import dlq_for
+from .topics import EVENT_LIFECYCLE, dlq_for
 from .v2_kafka_client import v2_kafka_producer
 
 async def send_to_dlq(
@@ -121,7 +121,21 @@ class PolarisV2Worker:
         )
 
         self.consumer = AIOKafkaConsumer(**kwargs)
-        print(f"📡 Worker connecting to MSK...")
+        print(f"📡 Worker connecting to MSK...", flush=True)
+        if self.topics and EVENT_LIFECYCLE not in self.topics:
+            print(
+                "WARNING: this worker is not subscribed to "
+                f"{EVENT_LIFECYCLE!r} — event and market v2 commands "
+                "(including CREATE_MARKET) will not run. Add that topic to "
+                "POLARIS_WORKER_TOPICS or use POLARIS_WORKER_DOMAIN=event (or "
+                "market). Subscribe to market.operations only if draining a "
+                "legacy backlog.",
+                flush=True,
+            )
+        print(
+            f"📡 Worker group={self.group_id!r} topics={self.topics!r}",
+            flush=True,
+        )
         await self.consumer.start()
         self.consumer.subscribe(self.topics)
 

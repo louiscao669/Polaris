@@ -51,7 +51,14 @@ def _key_for_topic(topic: str, payload: dict[str, Any]) -> bytes | None:
             or payload.get("eventId")
         )
     elif topic == EVENT_LIFECYCLE:
-        source = payload.get("event_id") or payload.get("eventId")
+        # Market v2 payloads are published on this topic too; use the same key
+        # ordering as legacy market.operations (event_id when present).
+        source = (
+            payload.get("event_id")
+            or payload.get("eventId")
+            or payload.get("market_id")
+            or payload.get("marketId")
+        )
     elif topic == ORG_MANAGEMENT:
         source = payload.get("organization_id") or payload.get("org_id")
     elif topic == USER_ACCOUNT:
