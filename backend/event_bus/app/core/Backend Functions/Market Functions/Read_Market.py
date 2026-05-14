@@ -1,7 +1,12 @@
 from typing import Any
 
 import pymysql, datetime
-from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
+from market_logic_helpers import (
+    _average_fill_from_logs,
+    _current_side_price,
+    _market_side_pools,
+    coerce_market_side_bool,
+)
 from fail import _fail, _log_result
 try:
     from app.read_cache import (
@@ -34,6 +39,15 @@ def _market_stats_db():
         if not cache_enabled_for_request()
         else get_connection_reader()
     )
+
+
+def _json_ts(value: Any) -> str | None:
+    """Serialize MySQL datetimes for JSON so browsers parse ``ts`` reliably."""
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
 
 
 def _cache_success(key: str, value: Any, ttl_seconds: float) -> Any:
@@ -186,7 +200,7 @@ def _quote_m(cursor, db, user_id, market_id, token_id, side, qty, transaction_ty
         if transaction_type not in ("BUY", "SELL"):
             return _fail("validation", "Transaction type must be BUY or SELL.")
 
-        normalized_side = bool(side)
+        normalized_side = coerce_market_side_bool(side)
 
         cursor.execute(
             """
@@ -519,7 +533,7 @@ def _points_m(cursor, db, user_id, market_id, span, hours=None):
 
             for side_value, transaction_type, total_value in cursor.fetchall():
                 signed_value = total_value if transaction_type == "BUY" else -total_value
-                if bool(side_value):
+                if coerce_market_side_bool(side_value):
                     yes_pool += signed_value
                 else:
                     no_pool += signed_value
@@ -562,7 +576,7 @@ def _points_m(cursor, db, user_id, market_id, span, hours=None):
         for transaction_id, ts, side_value, transaction_type, amt, price in cursor.fetchall():
             trade_value = amt * price
 
-            if bool(side_value):
+            if coerce_market_side_bool(side_value):
                 if transaction_type == "BUY":
                     yes_pool += trade_value
                 else:
@@ -576,17 +590,53 @@ def _points_m(cursor, db, user_id, market_id, span, hours=None):
             points.append(
                 {
                     "transaction_id": transaction_id,
-                    "ts": ts,
-                    "side": bool(side_value),
+                    "ts": _json_ts(ts),
+                    "side": coerce_market_side_bool(side_value),
                     "type": transaction_type,
-                    "qty": amt,
-                    "price": price,
-                    "yes_price": _current_side_price(yes_pool, no_pool, True),
-                    "no_price": _current_side_price(yes_pool, no_pool, False),
-                    "yes_pool": yes_pool,
-                    "no_pool": no_pool,
+                    "qty": int(amt) if amt is not None else 0,
+                    "price": int(price) if price is not None else 0,
+                    "yes_price": int(_current_side_price(yes_pool, no_pool, True)),
+                    "no_price": int(_current_side_price(yes_pool, no_pool, False)),
+                    "yes_pool": int(yes_pool),
+                    "no_pool": int(no_pool),
                 }
             )
+
+        # Hour-limited windows can return zero rows even when the market has older
+        # trades (everything outside the window). Return one snapshot so the UI is
+        # not a blank chart while liquidity still shows trade_count > 0.
+        if not points and hours is not None:
+            cursor.execute(
+                "SELECT COUNT(*) FROM market_transaction WHERE market_id = %s",
+                (market_id,),
+            )
+            n_tx_row = cursor.fetchone()
+            n_tx = int(n_tx_row[0]) if n_tx_row and n_tx_row[0] is not None else 0
+            if n_tx > 0:
+                gy, gn = _market_side_pools(cursor, market_id)
+                cursor.execute(
+                    """
+                    SELECT COALESCE(MAX(ts), UTC_TIMESTAMP())
+                    FROM market_transaction
+                    WHERE market_id = %s
+                    """,
+                    (market_id,),
+                )
+                last_ts = cursor.fetchone()[0]
+                points.append(
+                    {
+                        "transaction_id": 0,
+                        "ts": _json_ts(last_ts),
+                        "side": True,
+                        "type": "SNAPSHOT",
+                        "qty": 0,
+                        "price": 0,
+                        "yes_price": int(_current_side_price(gy, gn, True)),
+                        "no_price": int(_current_side_price(gy, gn, False)),
+                        "yes_pool": int(gy),
+                        "no_pool": int(gn),
+                    }
+                )
 
         return points
 

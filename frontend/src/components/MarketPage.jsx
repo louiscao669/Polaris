@@ -992,12 +992,6 @@ export default function MarketPage() {
                 <div className="market-forecast-chart" role="img" aria-label="Forecast trend">
                   {chartPath ? (
                     <svg viewBox="0 0 360 180" preserveAspectRatio="none">
-                      <defs>
-                        <linearGradient id="forecastLine" x1="0%" x2="100%" y1="0%" y2="0%">
-                          <stop offset="0%" stopColor="#7dd3fc" />
-                          <stop offset="100%" stopColor="#34d399" />
-                        </linearGradient>
-                      </defs>
                       <path className="market-forecast-chart__grid" d="M 18 18 L 18 162 L 342 162" />
                       <path className="market-forecast-chart__line" d={chartPath} />
                     </svg>

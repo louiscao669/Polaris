@@ -1,7 +1,12 @@
 from typing import Any, Optional
 
 import pymysql, datetime
-from market_logic_helpers import _market_side_pools, _current_side_price, _average_fill_from_logs
+from market_logic_helpers import (
+    _market_side_pools,
+    _current_side_price,
+    _average_fill_from_logs,
+    coerce_market_side_bool,
+)
 from fail import _fail, _log_result
 try:
     from app.read_cache import (
@@ -770,7 +775,7 @@ def _do_m_transaction(cursor, db, user_id, market_id, token_id, side, qty, trans
         if transaction_type not in ("BUY", "SELL"):
             return _fail("validation", "Transaction type must be BUY or SELL.")
 
-        normalized_side = bool(side)
+        normalized_side = coerce_market_side_bool(side)
 
         # Lock the market row before pricing and updating balances
         cursor.execute(

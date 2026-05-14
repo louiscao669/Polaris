@@ -211,8 +211,11 @@
 
 .market-forecast-chart__line {
   fill: none;
-  stroke: url(#forecastLine);
-  stroke-width: 4;
+  /* Do not use url(#…) from an external stylesheet — many browsers resolve the
+     fragment against the HTML document, not this SVG’s <defs>, so the stroke
+     disappears and only the grid remains visible. */
+  stroke: #7dd3fc;
+  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
