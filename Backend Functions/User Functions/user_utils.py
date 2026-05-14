@@ -13,9 +13,9 @@ def validate_credentials(cursor, username, password):
         """
         SELECT id, password_hash
         FROM users
-        WHERE username = %s
+        WHERE username = %s OR email = %s
         """,
-        (username,),
+        (username, username),
     )
     row = cursor.fetchone()
     if row is None:

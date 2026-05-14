@@ -21,6 +21,8 @@ except ImportError:
 
 def user_login(data: dict[str, Any]):
     username = data.get("username", data.get("login_identifier"))
+    if isinstance(username, str):
+        username = username.strip() or None
     password = data.get("password")
 
     if username is None:
@@ -84,10 +86,10 @@ def _user_login(cursor, db, username, password):
         return _fail("validation", f"Unable to log in: {e}")
 
 def user_signup(data: dict[str, Any]):
-    first = data.get("first")
-    last = data.get("last")
-    email = data.get("email")
-    username = data.get("username")
+    first = (data.get("first") or "").strip() or None
+    last = (data.get("last") or "").strip() or None
+    email = (data.get("email") or "").strip() or None
+    username = (data.get("username") or "").strip() or None
     password = data.get("password")
     age = data.get("age")
 
@@ -138,7 +140,10 @@ def _user_signup(cursor, db, first, last, email, username, password, age=None):
         )
         existing_user = cursor.fetchone()
         if existing_user is not None:
-            return existing_user[0]
+            return _fail(
+                "duplicate",
+                "An account with this username or email already exists.",
+            )
 
         cursor.execute(
             """
@@ -164,7 +169,10 @@ def _user_signup(cursor, db, first, last, email, username, password, age=None):
             )
             existing_user = cursor.fetchone()
             if existing_user is not None:
-                return existing_user[0]
+                return _fail(
+                    "duplicate",
+                    "An account with this username or email already exists.",
+                )
 
         return _fail("validation", "Unable to create user.")
 

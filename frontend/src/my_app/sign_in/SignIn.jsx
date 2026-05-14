@@ -133,7 +133,7 @@ export default function SignIn(props) {
     const idVal = username.value?.trim() ?? '';
     if (!idVal) {
       setUsernameError(true);
-      setUsernameErrorMessage('Enter your username.');
+      setUsernameErrorMessage('Enter your username or email.');
       isValid = false;
     } else {
       setUsernameError(false);
@@ -181,14 +181,14 @@ export default function SignIn(props) {
             }}
           >
             <FormControl>
-              <FormLabel htmlFor="username">Username</FormLabel>
+              <FormLabel htmlFor="username">Username or email</FormLabel>
               <TextField
                 error={usernameError}
                 helperText={usernameErrorMessage}
                 id="username"
                 type="text"
                 name="username"
-                placeholder="yourusername"
+                placeholder="username or you@example.com"
                 autoComplete="username"
                 autoFocus
                 required

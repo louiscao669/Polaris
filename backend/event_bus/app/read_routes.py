@@ -827,8 +827,11 @@ async def http_user_logout(payload: dict[str, Any] = Body(...)):
 
 @router.post("/auth/login")
 def http_auth_login(payload: dict[str, Any] = Body(...)):
+    raw_id = payload.get("username", payload.get("email", payload.get("login_identifier")))
+    if isinstance(raw_id, str):
+        raw_id = raw_id.strip() or None
     body = {
-        "username": payload.get("username", payload.get("email", payload.get("login_identifier"))),
+        "username": raw_id,
         "password": payload.get("password"),
     }
     return _apply(_write_user.user_login, body)
