@@ -335,7 +335,7 @@ def warm_cache(args: argparse.Namespace, headers: dict[str, str]) -> None:
             )
 
 
-def print_summary(results: list[ReadResult], total_seconds: float) -> None:
+def print_summary(results: list[ReadResult], submit_seconds: float, total_seconds: float) -> None:
     latencies = [r.latency_ms for r in results]
     succeeded = [r for r in results if r.ok]
     failed = [r for r in results if not r.ok]
@@ -345,7 +345,11 @@ def print_summary(results: list[ReadResult], total_seconds: float) -> None:
     print(f"requests_sent: {len(results)}")
     print(f"requests_succeeded: {len(succeeded)}")
     print(f"requests_failed: {len(failed)}")
-    print(f"total_seconds: {total_seconds:.3f}")
+    print(f"dispatch_seconds: {submit_seconds:.3f}")
+    print(f"completion_seconds: {total_seconds:.3f}")
+    print(f"completion_wait_seconds: {max(0.0, total_seconds - submit_seconds):.3f}")
+    if submit_seconds > 0:
+        print(f"submit_rps: {len(results) / submit_seconds:.2f}")
     if total_seconds > 0:
         print(f"throughput_rps: {len(results) / total_seconds:.2f}")
 
@@ -460,7 +464,7 @@ def parse_args() -> argparse.Namespace:
 
 def run_once(
     args: argparse.Namespace, headers: dict[str, str], *, verbose: bool
-) -> tuple[int, int, float]:
+) -> tuple[int, int, float, float]:
     if args.warm_cache:
         warm_cache(args, headers)
 
@@ -494,15 +498,16 @@ def run_once(
             pool.submit(submit_read, idx, args, headers)
             for idx in range(args.requests)
         ]
+        submit_seconds = time.perf_counter() - started
         for future in as_completed(futures):
             results.append(future.result())
     total_seconds = time.perf_counter() - started
 
     if verbose:
-        print_summary(results, total_seconds)
+        print_summary(results, submit_seconds, total_seconds)
     succeeded = sum(1 for result in results if result.ok)
     failed = len(results) - succeeded
-    return succeeded, failed, total_seconds
+    return succeeded, failed, submit_seconds, total_seconds
 
 
 def main() -> int:
@@ -554,7 +559,9 @@ def main() -> int:
             args.engineer_user_ids, args.marketing_user_ids = select_role_users(args)
             print(f"selected_engineer_user_ids: {args.engineer_user_ids}")
             print(f"selected_marketing_user_ids: {args.marketing_user_ids}")
-        _succeeded, failed, _total_seconds = run_once(args, headers, verbose=True)
+        _succeeded, failed, _submit_seconds, _total_seconds = run_once(
+            args, headers, verbose=True
+        )
         return 1 if failed else 0
 
     if (concurrency_sweep or market_count_sweep) and args.auto_pick_role_users:
@@ -589,8 +596,11 @@ def main() -> int:
     print(f"{sweep_label}_values: {sweep_values}")
     print(f"requests_per_run: {args.requests}")
     print()
-    print(f"{sweep_label:<7}  succeeded  failed  throughput_rps  total_s")
-    print("-" * 58)
+    print(
+        f"{sweep_label:<7}  succeeded  failed  submit_rps  throughput_rps  "
+        "submit_s  total_s"
+    )
+    print("-" * 82)
     any_failed = False
     csv_rows: list[dict[str, float | int | str]] = []
     for i, sweep_value in enumerate(sweep_values):
@@ -615,18 +625,24 @@ def main() -> int:
             run_args.concurrency = sweep_value
         else:
             run_args.market_count = sweep_value
-        succeeded, failed, total_seconds = run_once(run_args, headers, verbose=False)
+        succeeded, failed, submit_seconds, total_seconds = run_once(
+            run_args, headers, verbose=False
+        )
+        submit_rps = (args.requests / submit_seconds) if submit_seconds > 0 else 0.0
         throughput_rps = (args.requests / total_seconds) if total_seconds > 0 else 0.0
         print(
             f"{sweep_value:>7}  {succeeded:>9}  {failed:>6}  "
-            f"{throughput_rps:>14.2f}  {total_seconds:>7.3f}"
+            f"{submit_rps:>10.2f}  {throughput_rps:>14.2f}  "
+            f"{submit_seconds:>8.3f}  {total_seconds:>7.3f}"
         )
         csv_rows.append(
             {
                 sweep_label: sweep_value,
                 "succeeded": succeeded,
                 "failed": failed,
+                "submit_rps": round(submit_rps, 4),
                 "throughput_rps": round(throughput_rps, 4),
+                "submit_s": round(submit_seconds, 4),
                 "total_s": round(total_seconds, 4),
                 "endpoint_template": args.endpoint_template,
                 "cache_mode": args.cache_mode,

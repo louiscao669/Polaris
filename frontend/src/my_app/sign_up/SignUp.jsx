@@ -154,10 +154,14 @@ function SignUpContent() {
       delete payload.age;
     }
     try {
-      await submitAndAwaitV2Operation('/user/account', {
-        action: 'USER_SIGNUP',
-        ...payload,
-      });
+      await submitAndAwaitV2Operation(
+        '/user/account',
+        {
+          action: 'USER_SIGNUP',
+          ...payload,
+        },
+        { skipAuthHeaders: true },
+      );
       navigate('/signin', {
         state: {
           signupSuccess: 'Account created. Sign in to continue.',

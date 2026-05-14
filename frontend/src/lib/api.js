@@ -62,14 +62,15 @@ export async function readJson(path, options = {}) {
 }
 
 export async function postJson(path, body, options = {}) {
+  const { skipAuthHeaders, headers: optionHeaders, ...rest } = options;
   const response = await fetch(`${READ_API_BASE}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-      ...(options.headers || {}),
+      ...(skipAuthHeaders ? {} : getAuthHeaders()),
+      ...(optionHeaders || {}),
     },
-    ...options,
+    ...rest,
     body: JSON.stringify(body),
   });
 
@@ -83,14 +84,15 @@ export async function postJson(path, body, options = {}) {
 }
 
 export async function putJson(path, body, options = {}) {
+  const { skipAuthHeaders, headers: optionHeaders, ...rest } = options;
   const response = await fetch(`${READ_API_BASE}${path}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-      ...(options.headers || {}),
+      ...(skipAuthHeaders ? {} : getAuthHeaders()),
+      ...(optionHeaders || {}),
     },
-    ...options,
+    ...rest,
     body: JSON.stringify(body),
   });
 
@@ -104,14 +106,15 @@ export async function putJson(path, body, options = {}) {
 }
 
 export async function submitV2Operation(path, body, options = {}) {
+  const { skipAuthHeaders, headers: optionHeaders, ...rest } = options;
   const response = await fetch(`${WRITE_API_BASE}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-      ...(options.headers || {}),
+      ...(skipAuthHeaders ? {} : getAuthHeaders()),
+      ...(optionHeaders || {}),
     },
-    ...options,
+    ...rest,
     body: JSON.stringify(body),
   });
 
@@ -127,12 +130,17 @@ export async function submitV2Operation(path, body, options = {}) {
 export async function submitAndAwaitV2Operation(path, body, options = {}) {
   const {
     pollOptions,
+    skipAuthHeaders,
     ...submitOptions
   } = options;
-  const accepted = await submitV2Operation(path, body, submitOptions);
+  const accepted = await submitV2Operation(path, body, {
+    ...submitOptions,
+    skipAuthHeaders,
+  });
   return pollOperation(accepted.operation_id, {
     headers: { 'X-Force-Leader': 'true' },
     ...(pollOptions || {}),
+    skipAuthHeaders: pollOptions?.skipAuthHeaders ?? skipAuthHeaders,
   });
 }
 
@@ -141,13 +149,14 @@ export async function pollOperation(operationId, options = {}) {
     intervalMs = 1200,
     timeoutMs = 15000,
     headers,
+    skipAuthHeaders,
   } = options;
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
     const payload = await readJson(`/v2/operations/${operationId}`, {
       headers: {
-        ...getAuthHeaders(),
+        ...(skipAuthHeaders ? {} : getAuthHeaders()),
         ...(headers || {}),
       },
     });
