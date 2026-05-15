@@ -26,6 +26,19 @@ from .v2_routes import router as v2_router
 from dotenv import load_dotenv
 load_dotenv()
 
+_CORS_EXTRA_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("POLARIS_CORS_EXTRA_ORIGINS", "").split(",")
+    if o.strip()
+]
+# Browsers surface blocked cross-origin requests as ``TypeError: Failed to fetch``.
+# ``allow_origins`` must match the page origin exactly; regex covers other Vite
+# ports, Amplify preview hosts, and POLARIS_CORS_EXTRA_ORIGINS for custom domains.
+_CORS_ORIGIN_REGEX = (
+    r"^http://(localhost|127\.0\.0\.1):\d+$"
+    r"|^https://[a-z0-9][a-z0-9.-]*\.amplifyapp\.com$"
+)
+
 SERVER_ID = 0
 TOTAL_NODES = 1
 
@@ -110,7 +123,9 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "https://main.d13pchhw5oxj1s.amplifyapp.com",
+        *_CORS_EXTRA_ORIGINS,
     ],
+    allow_origin_regex=_CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

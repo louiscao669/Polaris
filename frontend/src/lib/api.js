@@ -12,6 +12,27 @@ export const READ_API_BASE = API_ROOT;
 export const WRITE_API_BASE = `${API_ROOT}/v2`;
 export const API_BASE = READ_API_BASE;
 
+/** Shown when ``fetch`` throws (no HTTP status). Not the same as CORS: DevTools often labels CORS separately. */
+const FETCH_NETWORK_HINT =
+  'Check that this host is up, DNS resolves, VPN/firewall allows it, TLS is valid, no extension is blocking the request, and you are not loading an HTTPS site against an http-only API (mixed content).';
+
+async function fetchFromApi(base, path, init) {
+  const url = `${base}${path}`;
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (
+      err instanceof TypeError ||
+      msg.includes('Failed to fetch') ||
+      msg.includes('NetworkError')
+    ) {
+      throw new Error(`Could not reach the API (${url}). ${FETCH_NETWORK_HINT}`);
+    }
+    throw err;
+  }
+}
+
 export function formatApiError(payload, fallback = 'Request failed.') {
   const detail = payload?.detail;
 
@@ -51,7 +72,7 @@ function getAuthHeaders() {
 }
 
 export async function readJson(path, options = {}) {
-  const response = await fetch(`${READ_API_BASE}${path}`, options);
+  const response = await fetchFromApi(READ_API_BASE, path, options);
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -63,7 +84,7 @@ export async function readJson(path, options = {}) {
 
 export async function postJson(path, body, options = {}) {
   const { skipAuthHeaders, headers: optionHeaders, ...rest } = options;
-  const response = await fetch(`${READ_API_BASE}${path}`, {
+  const response = await fetchFromApi(READ_API_BASE, path, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -85,7 +106,7 @@ export async function postJson(path, body, options = {}) {
 
 export async function putJson(path, body, options = {}) {
   const { skipAuthHeaders, headers: optionHeaders, ...rest } = options;
-  const response = await fetch(`${READ_API_BASE}${path}`, {
+  const response = await fetchFromApi(READ_API_BASE, path, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -107,7 +128,7 @@ export async function putJson(path, body, options = {}) {
 
 export async function submitV2Operation(path, body, options = {}) {
   const { skipAuthHeaders, headers: optionHeaders, ...rest } = options;
-  const response = await fetch(`${WRITE_API_BASE}${path}`, {
+  const response = await fetchFromApi(WRITE_API_BASE, path, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
