@@ -20,7 +20,11 @@ except ImportError:
     from backend.event_bus.app.database import get_connection
 
 
-def _invalidate_event_reads(cursor, event_id: int, organization_id: Optional[int] = None) -> None:
+def _invalidate_event_reads(
+    cursor, event_id: Optional[int], organization_id: Optional[int] = None
+) -> None:
+    if event_id is None:
+        return
     invalidate_event_markets_cache(int(event_id))
     if organization_id is None:
         cursor.execute(
@@ -142,9 +146,15 @@ def _create_e(cursor, db, user_id, organization_id, caption, explicit_event_id=N
             """,
             (organization_id, caption),
         )
+        # Read lastrowid before commit or any further executes on this cursor;
+        # PyMySQL can clear or change lastrowid after subsequent queries.
+        new_eid = cursor.lastrowid
+        if new_eid is None or new_eid == 0:
+            db.rollback()
+            return _fail("validation", "Unable to create event (database did not return a new event id).")
+        new_eid = int(new_eid)
         db.commit()
-        _invalidate_event_reads(cursor, cursor.lastrowid, organization_id)
-        new_eid = int(cursor.lastrowid)
+        _invalidate_event_reads(cursor, new_eid, organization_id)
         _ensure_org_leader_in_event_market_creators(cursor, db, new_eid, user_id)
 
         return new_eid
