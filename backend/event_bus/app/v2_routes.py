@@ -18,7 +18,7 @@ from .operations_repo import fetch_operation, use_writer_for_operation_fetch
 from .settings_jwt import (
     V2_OPERATIONS_REQUIRE_JWT,
 )
-from .topics import EVENT_LIFECYCLE, ORG_MANAGEMENT, USER_ACCOUNT
+from .topics import EVENT_LIFECYCLE, MARKET_OPERATIONS, ORG_MANAGEMENT, USER_ACCOUNT
 
 
 router = APIRouter(prefix="/v2", tags=["v2-async"])
@@ -49,8 +49,8 @@ async def v2_market_transaction(
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> Response:
     return await enqueue_command_response(
-        topic=EVENT_LIFECYCLE,
-        domain="event.lifecycle",
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
         payload=payload,
         claims=claims,
         x_user_id=x_user_id,
@@ -64,8 +64,8 @@ async def v2_market_payout(
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> Response:
     return await enqueue_command_response(
-        topic=EVENT_LIFECYCLE,
-        domain="event.lifecycle",
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
         payload=payload,
         claims=claims,
         x_user_id=x_user_id,
@@ -79,8 +79,8 @@ async def v2_market_lifecycle(
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> Response:
     return await enqueue_command_response(
-        topic=EVENT_LIFECYCLE,
-        domain="event.lifecycle",
+        topic=MARKET_OPERATIONS,
+        domain="market.operations",
         payload=payload,
         claims=claims,
         x_user_id=x_user_id,

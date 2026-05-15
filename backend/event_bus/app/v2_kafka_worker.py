@@ -17,7 +17,7 @@ from .core.kafka_dispatch import dispatch_v2_consolidated
 from .kafka_aiokafka_common import aiokafka_common_kwargs
 from .operations_repo import update_operation_status
 from .processed_events_repo import classify_message, mark_applied, mark_failed
-from .topics import EVENT_LIFECYCLE, dlq_for
+from .topics import EVENT_LIFECYCLE, MARKET_OPERATIONS, dlq_for
 from .v2_kafka_client import v2_kafka_producer
 
 async def send_to_dlq(
@@ -125,11 +125,17 @@ class PolarisV2Worker:
         if self.topics and EVENT_LIFECYCLE not in self.topics:
             print(
                 "WARNING: this worker is not subscribed to "
-                f"{EVENT_LIFECYCLE!r} — event and market v2 commands "
-                "(including CREATE_MARKET) will not run. Add that topic to "
-                "POLARIS_WORKER_TOPICS or use POLARIS_WORKER_DOMAIN=event (or "
-                "market). Subscribe to market.operations only if draining a "
-                "legacy backlog.",
+                f"{EVENT_LIFECYCLE!r} — event v2 HTTP commands will not run. "
+                "Add that topic to POLARIS_WORKER_TOPICS or use "
+                "POLARIS_WORKER_DOMAIN=event.",
+                flush=True,
+            )
+        if self.topics and MARKET_OPERATIONS not in self.topics:
+            print(
+                "WARNING: this worker is not subscribed to "
+                f"{MARKET_OPERATIONS!r} — market v2 HTTP commands will not run. "
+                "Add that topic to POLARIS_WORKER_TOPICS or use "
+                "POLARIS_WORKER_DOMAIN=market.",
                 flush=True,
             )
         print(

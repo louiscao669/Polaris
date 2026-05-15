@@ -179,8 +179,6 @@ def dispatch_v2_consolidated(consolidated_topic: str, payload: dict[str, Any]) -
         return dispatch_legacy_topic(TOPIC_ORGANIZATION, payload)
 
     if consolidated_topic == EVENT_LIFECYCLE:
-        if action in _MARKET_LIFECYCLE_ACTIONS or action in _MARKET_FINANCE_ACTIONS:
-            return dispatch_legacy_topic(TOPIC_PLATFORM_MARKET, payload)
         if action not in _EVENT_ACTIONS:
             raise ValueError(f"unknown action for event.lifecycle topic: {action!r}")
         return dispatch_legacy_topic(TOPIC_PLATFORM_EVENT, payload)
