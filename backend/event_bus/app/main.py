@@ -82,8 +82,8 @@ async def lifespan(app: FastAPI):
             print(f"WARNING: {e}", flush=True)
             print(f"WARNING: {msg}", flush=True)
 
-    consumer_task: asyncio.Task | None = None
-    v2_worker_task: asyncio.Task | None = None
+    consumer_task: Optional[asyncio.Task] = None
+    v2_worker_task: Optional[asyncio.Task] = None
 
     if POLARIS_ENABLE_LEGACY_CONSUMER:
         node_state = NodeState()

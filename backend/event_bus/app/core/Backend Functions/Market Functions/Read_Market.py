@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 import pymysql, datetime
 from market_logic_helpers import (
@@ -41,7 +41,7 @@ def _market_stats_db():
     )
 
 
-def _json_ts(value: Any) -> str | None:
+def _json_ts(value: Any) -> Optional[str]:
     """Serialize MySQL datetimes for JSON so browsers parse ``ts`` reliably."""
     if value is None:
         return None
